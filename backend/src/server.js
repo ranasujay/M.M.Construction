@@ -27,7 +27,7 @@ connectDB();
 // ─── Global Middleware ───────────────────────────────────────────────
 app.use(cors({
   origin: config.nodeEnv === 'production' 
-    ? ['https://mm-construction.vercel.app', 'https://mm-construction-frontend.vercel.app']
+    ? ['https://m-m-construction.vercel.app']
     : '*',
   credentials: true
 }));
