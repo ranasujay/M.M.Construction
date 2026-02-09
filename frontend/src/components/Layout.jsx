@@ -16,6 +16,10 @@ import {
   HiOutlineX,
   HiOutlineExclamation,
   HiOutlineCash,
+  HiOutlineClipboardCheck,
+  HiOutlineBriefcase,
+  HiOutlineCalculator,
+  HiOutlineViewGrid,
 } from 'react-icons/hi';
 
 const navItems = [
@@ -35,6 +39,14 @@ const ownerItems = [
   { path: '/users', label: 'Users', icon: HiOutlineUserGroup },
 ];
 
+const workerModuleItems = [
+  { path: '/worker-dashboard', label: 'Payroll Dashboard', icon: HiOutlineViewGrid },
+  { path: '/workers', label: 'Workers', icon: HiOutlineBriefcase },
+  { path: '/worker-attendance', label: 'Attendance', icon: HiOutlineClipboardCheck },
+  { path: '/worker-advances', label: 'Worker Advances', icon: HiOutlineCash },
+  { path: '/worker-salary', label: 'Salary Sheet', icon: HiOutlineCalculator },
+];
+
 export default function Layout() {
   const { user, logout, isOwner } = useAuth();
   const navigate = useNavigate();
@@ -46,6 +58,7 @@ export default function Layout() {
   };
 
   const allNavItems = isOwner ? [...navItems, ...ownerItems] : navItems;
+  const workerNav = isOwner ? workerModuleItems : [];
 
   const SidebarContent = () => (
     <div className="flex flex-col h-full">
@@ -75,6 +88,32 @@ export default function Layout() {
             {item.label}
           </NavLink>
         ))}
+
+        {/* Worker & Payroll Section */}
+        {workerNav.length > 0 && (
+          <>
+            <div className="pt-4 pb-2 px-3">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-gray-600">Workers & Payroll</p>
+            </div>
+            {workerNav.map((item) => (
+              <NavLink
+                key={item.path}
+                to={item.path}
+                onClick={() => setSidebarOpen(false)}
+                className={({ isActive }) =>
+                  `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 ${
+                    isActive
+                      ? 'bg-primary-600/20 text-primary-400 border-l-2 border-primary-400'
+                      : 'text-gray-400 hover:bg-dark-hover hover:text-gray-200'
+                  }`
+                }
+              >
+                <item.icon className="w-5 h-5 flex-shrink-0" />
+                {item.label}
+              </NavLink>
+            ))}
+          </>
+        )}
       </nav>
 
       {/* User info & logout */}

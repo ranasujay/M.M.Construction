@@ -17,6 +17,12 @@ import ActivityLogs from './pages/ActivityLogs';
 import Users from './pages/Users';
 import DueList from './pages/DueList';
 import AdvanceList from './pages/AdvanceList';
+import WorkerDashboard from './pages/WorkerDashboard';
+import Workers from './pages/Workers';
+import WorkerProfile from './pages/WorkerProfile';
+import WorkerAttendance from './pages/WorkerAttendance';
+import WorkerAdvances from './pages/WorkerAdvances';
+import WorkerSalary from './pages/WorkerSalary';
 
 // Protected route wrapper
 const ProtectedRoute = ({ children }) => {
@@ -66,6 +72,31 @@ function App() {
         <Route
           path="users"
           element={<OwnerRoute><Users /></OwnerRoute>}
+        />
+        {/* Worker & Payroll Module (Owner Only) */}
+        <Route
+          path="worker-dashboard"
+          element={<OwnerRoute><WorkerDashboard /></OwnerRoute>}
+        />
+        <Route
+          path="workers"
+          element={<OwnerRoute><Workers /></OwnerRoute>}
+        />
+        <Route
+          path="workers/:id"
+          element={<OwnerRoute><WorkerProfile /></OwnerRoute>}
+        />
+        <Route
+          path="worker-attendance"
+          element={<OwnerRoute><WorkerAttendance /></OwnerRoute>}
+        />
+        <Route
+          path="worker-advances"
+          element={<OwnerRoute><WorkerAdvances /></OwnerRoute>}
+        />
+        <Route
+          path="worker-salary"
+          element={<OwnerRoute><WorkerSalary /></OwnerRoute>}
         />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />

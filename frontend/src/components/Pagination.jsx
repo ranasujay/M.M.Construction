@@ -14,17 +14,17 @@ export default function Pagination({ currentPage, totalPages, onPageChange }) {
   }
 
   return (
-    <div className="flex items-center justify-center gap-2 mt-6">
+    <div className="flex items-center justify-center gap-1.5 sm:gap-2 mt-6">
       <button
         onClick={() => onPageChange(currentPage - 1)}
         disabled={currentPage === 1}
-        className="btn-secondary px-3 py-1.5 text-sm disabled:opacity-30"
+        className="btn-secondary !px-3 !py-2 text-sm disabled:opacity-30 !min-h-[40px]"
       >
         Prev
       </button>
       {start > 1 && (
         <>
-          <button onClick={() => onPageChange(1)} className="btn-secondary px-3 py-1.5 text-sm">1</button>
+          <button onClick={() => onPageChange(1)} className="btn-secondary !px-3 !py-2 text-sm !min-h-[40px]">1</button>
           {start > 2 && <span className="text-gray-500">...</span>}
         </>
       )}
@@ -32,7 +32,7 @@ export default function Pagination({ currentPage, totalPages, onPageChange }) {
         <button
           key={page}
           onClick={() => onPageChange(page)}
-          className={`px-3 py-1.5 text-sm rounded-lg font-medium transition-colors ${
+          className={`!px-3 !py-2 text-sm rounded-lg font-medium transition-colors !min-h-[40px] ${
             page === currentPage
               ? 'bg-primary-600 text-white'
               : 'btn-secondary'
@@ -44,13 +44,13 @@ export default function Pagination({ currentPage, totalPages, onPageChange }) {
       {end < totalPages && (
         <>
           {end < totalPages - 1 && <span className="text-gray-500">...</span>}
-          <button onClick={() => onPageChange(totalPages)} className="btn-secondary px-3 py-1.5 text-sm">{totalPages}</button>
+          <button onClick={() => onPageChange(totalPages)} className="btn-secondary !px-3 !py-2 text-sm !min-h-[40px]">{totalPages}</button>
         </>
       )}
       <button
         onClick={() => onPageChange(currentPage + 1)}
         disabled={currentPage === totalPages}
-        className="btn-secondary px-3 py-1.5 text-sm disabled:opacity-30"
+        className="btn-secondary !px-3 !py-2 text-sm disabled:opacity-30 !min-h-[40px]"
       >
         Next
       </button>

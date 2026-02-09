@@ -76,6 +76,42 @@ const promiseRules = [
   body('promisedAmount').isFloat({ min: 0.01 }).withMessage('Amount must be > 0'),
 ];
 
+// ─── Worker Validators ──────────────────────────────────────────────
+const workerRules = [
+  body('name').trim().notEmpty().withMessage('Worker name is required'),
+  body('role')
+    .isIn(['Welder', 'Fitter', 'Helper', 'Painter', 'Mason', 'Electrician', 'Supervisor', 'Other'])
+    .withMessage('Invalid worker role'),
+  body('salaryType').isIn(['Daily', 'Monthly']).withMessage('Salary type must be Daily or Monthly'),
+  body('dailyWage').optional().isFloat({ min: 0 }).withMessage('Daily wage must be >= 0'),
+  body('monthlySalary').optional().isFloat({ min: 0 }).withMessage('Monthly salary must be >= 0'),
+  body('overtimeRate').optional().isFloat({ min: 0 }).withMessage('Overtime rate must be >= 0'),
+  body('joiningDate').optional().isISO8601().withMessage('Invalid joining date'),
+];
+
+// ─── Attendance Validators ──────────────────────────────────────────
+const attendanceRules = [
+  body('date').isISO8601().withMessage('Valid date is required'),
+  body('records').isArray({ min: 1 }).withMessage('At least one attendance record is required'),
+  body('records.*.worker').isMongoId().withMessage('Valid worker ID is required'),
+  body('records.*.status').isIn(['Present', 'Absent']).withMessage('Status must be Present or Absent'),
+  body('records.*.overtimeHours').optional().isFloat({ min: 0 }).withMessage('Overtime hours must be >= 0'),
+];
+
+const singleAttendanceRules = [
+  body('worker').isMongoId().withMessage('Valid worker ID is required'),
+  body('date').isISO8601().withMessage('Valid date is required'),
+  body('status').isIn(['Present', 'Absent']).withMessage('Status must be Present or Absent'),
+  body('overtimeHours').optional().isFloat({ min: 0 }).withMessage('Overtime hours must be >= 0'),
+];
+
+// ─── Advance Validators ────────────────────────────────────────────
+const advanceRules = [
+  body('worker').isMongoId().withMessage('Valid worker ID is required'),
+  body('amount').isFloat({ min: 1 }).withMessage('Amount must be > 0'),
+  body('date').optional().isISO8601().withMessage('Invalid date'),
+];
+
 // ─── Mongo ID Param Validator ────────────────────────────────────────
 const mongoIdParam = [param('id').isMongoId().withMessage('Invalid ID format')];
 
@@ -88,5 +124,9 @@ module.exports = {
   billRules,
   paymentRules,
   promiseRules,
+  workerRules,
+  attendanceRules,
+  singleAttendanceRules,
+  advanceRules,
   mongoIdParam,
 };
