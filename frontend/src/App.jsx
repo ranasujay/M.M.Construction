@@ -23,6 +23,7 @@ import WorkerProfile from './pages/WorkerProfile';
 import WorkerAttendance from './pages/WorkerAttendance';
 import WorkerAdvances from './pages/WorkerAdvances';
 import WorkerSalary from './pages/WorkerSalary';
+import ProductSales from './pages/ProductSales';
 
 // Protected route wrapper
 const ProtectedRoute = ({ children }) => {
@@ -68,6 +69,10 @@ function App() {
         <Route
           path="activity-logs"
           element={<OwnerRoute><ActivityLogs /></OwnerRoute>}
+        />
+        <Route
+          path="product-sales"
+          element={<OwnerRoute><ProductSales /></OwnerRoute>}
         />
         <Route
           path="users"

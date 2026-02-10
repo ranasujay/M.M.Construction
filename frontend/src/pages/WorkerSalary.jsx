@@ -12,6 +12,7 @@ import EmptyState from '../components/EmptyState';
 import MonthYearPicker from '../components/MonthYearPicker';
 import Modal from '../components/Modal';
 import AlertBanner from '../components/AlertBanner';
+import ConfirmDialog from '../components/ConfirmDialog';
 import { salaryAPI } from '../services/workerApi';
 import { formatCurrency } from '../utils/helpers';
 
@@ -23,6 +24,7 @@ export default function WorkerSalary() {
   const [totals, setTotals] = useState(null);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
+  const [generateConfirm, setGenerateConfirm] = useState(false);
 
   // Confirmation modal state
   const [confirmModal, setConfirmModal] = useState(false);
@@ -47,6 +49,7 @@ export default function WorkerSalary() {
   };
 
   const handleGenerateAll = async () => {
+    setGenerateConfirm(false);
     setGenerating(true);
     try {
       const { data } = await salaryAPI.generateAll(month, year);
@@ -97,7 +100,7 @@ export default function WorkerSalary() {
         <div className="flex items-center gap-3 flex-wrap">
           <MonthYearPicker month={month} year={year} onChange={(m, y) => { setMonth(m); setYear(y); }} />
           <button
-            onClick={handleGenerateAll}
+            onClick={() => setGenerateConfirm(true)}
             disabled={generating}
             className="btn-primary flex items-center gap-2"
           >
@@ -211,7 +214,7 @@ export default function WorkerSalary() {
           title="No salary records"
           description="Click 'Generate All' to calculate salaries for this month based on attendance and advances"
           action={
-            <button onClick={handleGenerateAll} disabled={generating} className="btn-primary">
+            <button onClick={() => setGenerateConfirm(true)} disabled={generating} className="btn-primary">
               Generate Salaries
             </button>
           }
@@ -378,6 +381,16 @@ export default function WorkerSalary() {
           </div>
         </>
       )}
+
+      <ConfirmDialog
+        isOpen={generateConfirm}
+        onClose={() => setGenerateConfirm(false)}
+        onConfirm={handleGenerateAll}
+        title="Generate All Salaries?"
+        message={`This will calculate/recalculate salaries for all workers for ${new Date(year, month - 1).toLocaleString('default', { month: 'long' })} ${year}. Existing unpaid records will be updated.`}
+        confirmText="Generate"
+        variant="warning"
+      />
     </div>
   );
 }

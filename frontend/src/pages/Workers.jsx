@@ -9,6 +9,7 @@ import {
   HiOutlineUserGroup,
 } from 'react-icons/hi';
 import Modal from '../components/Modal';
+import ConfirmDialog from '../components/ConfirmDialog';
 import Loader from '../components/Loader';
 import EmptyState from '../components/EmptyState';
 import { workerAPI } from '../services/workerApi';
@@ -25,6 +26,7 @@ const initialForm = {
   monthlySalary: '',
   overtimeRate: '',
   joiningDate: new Date().toISOString().split('T')[0],
+  effectiveFrom: new Date().toISOString().split('T')[0],
 };
 
 export default function Workers() {
@@ -37,6 +39,7 @@ export default function Workers() {
   const [editingWorker, setEditingWorker] = useState(null);
   const [form, setForm] = useState(initialForm);
   const [saving, setSaving] = useState(false);
+  const [confirmDialog, setConfirmDialog] = useState({ open: false, worker: null });
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -79,6 +82,7 @@ export default function Workers() {
       joiningDate: worker.joiningDate
         ? new Date(worker.joiningDate).toISOString().split('T')[0]
         : '',
+      effectiveFrom: new Date().toISOString().split('T')[0],
     });
     setShowModal(true);
   };
@@ -96,9 +100,13 @@ export default function Workers() {
       };
 
       if (editingWorker) {
+        // Include effectiveFrom for rate change tracking
+        payload.effectiveFrom = form.effectiveFrom;
         await workerAPI.update(editingWorker._id, payload);
         toast.success('Worker updated');
       } else {
+        // Remove effectiveFrom for new workers (uses joiningDate)
+        delete payload.effectiveFrom;
         await workerAPI.create(payload);
         toast.success('Worker added');
       }
@@ -111,13 +119,21 @@ export default function Workers() {
     }
   };
 
-  const handleToggleStatus = async (worker) => {
+  const openToggleConfirm = (worker) => {
+    setConfirmDialog({ open: true, worker });
+  };
+
+  const handleToggleStatus = async () => {
+    const worker = confirmDialog.worker;
+    if (!worker) return;
     try {
       await workerAPI.toggleStatus(worker._id);
       toast.success(`${worker.name} ${worker.isActive ? 'deactivated' : 'activated'}`);
       fetchWorkers();
     } catch (err) {
       toast.error('Failed to update status');
+    } finally {
+      setConfirmDialog({ open: false, worker: null });
     }
   };
 
@@ -220,7 +236,7 @@ export default function Workers() {
                     <HiOutlinePencil className="w-3.5 h-3.5 inline mr-1" /> Edit
                   </button>
                   <button
-                    onClick={() => handleToggleStatus(w)}
+                    onClick={() => openToggleConfirm(w)}
                     className={`flex-1 text-center py-2 rounded-lg text-xs font-medium ${
                       w.isActive
                         ? 'bg-red-500/10 text-red-400 active:bg-red-500/20'
@@ -294,7 +310,7 @@ export default function Workers() {
                           <HiOutlinePencil className="w-4 h-4" />
                         </button>
                         <button
-                          onClick={() => handleToggleStatus(w)}
+                          onClick={() => openToggleConfirm(w)}
                           className={`text-xs px-2 py-1 rounded-lg border transition-colors ${
                             w.isActive
                               ? 'border-red-500/30 text-red-400 hover:bg-red-400/10'
@@ -399,6 +415,19 @@ export default function Workers() {
                 className="input w-full"
               />
             </div>
+            {editingWorker && (
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-1">Rate Effective From *</label>
+                <input
+                  type="date"
+                  value={form.effectiveFrom}
+                  onChange={(e) => setForm({ ...form, effectiveFrom: e.target.value })}
+                  className="input w-full"
+                  required
+                />
+                <p className="text-[10px] text-amber-400 mt-1">Rate changes will apply from this date onward</p>
+              </div>
+            )}
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-1">Joining Date</label>
               <input
@@ -419,6 +448,21 @@ export default function Workers() {
           </div>
         </form>
       </Modal>
+
+      {/* Confirm status toggle */}
+      <ConfirmDialog
+        isOpen={confirmDialog.open}
+        onClose={() => setConfirmDialog({ open: false, worker: null })}
+        onConfirm={handleToggleStatus}
+        title={confirmDialog.worker?.isActive ? 'Deactivate Worker?' : 'Activate Worker?'}
+        message={
+          confirmDialog.worker?.isActive
+            ? `"${confirmDialog.worker?.name}" will be marked inactive and won't appear in attendance or salary.`
+            : `"${confirmDialog.worker?.name}" will be marked active again.`
+        }
+        confirmText={confirmDialog.worker?.isActive ? 'Deactivate' : 'Activate'}
+        variant={confirmDialog.worker?.isActive ? 'danger' : 'success'}
+      />
     </div>
   );
 }

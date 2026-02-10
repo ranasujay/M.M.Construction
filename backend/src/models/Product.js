@@ -11,7 +11,7 @@ const productSchema = new mongoose.Schema(
     category: {
       type: String,
       required: [true, 'Category is required'],
-      enum: ['Grill', 'Shutter', 'Railing', 'Window', 'Gate', 'Custom'],
+      trim: true,
     },
     baseRate: {
       type: Number,

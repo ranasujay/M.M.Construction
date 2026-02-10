@@ -8,6 +8,7 @@ import {
 import Modal from '../components/Modal';
 import Loader from '../components/Loader';
 import EmptyState from '../components/EmptyState';
+import ConfirmDialog from '../components/ConfirmDialog';
 import MonthYearPicker from '../components/MonthYearPicker';
 import { workerAPI, workerAdvanceAPI } from '../services/workerApi';
 import { formatDate, formatCurrency } from '../utils/helpers';
@@ -20,6 +21,7 @@ export default function WorkerAdvances() {
   const [workers, setWorkers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState({ open: false, id: null });
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({
     worker: '',
@@ -82,11 +84,13 @@ export default function WorkerAdvances() {
     }
   };
 
-  const handleDelete = async (id) => {
-    if (!confirm('Delete this advance entry?')) return;
+  const handleDelete = async () => {
+    const id = deleteConfirm.id;
+    if (!id) return;
     try {
       await workerAdvanceAPI.delete(id);
       toast.success('Advance deleted');
+      setDeleteConfirm({ open: false, id: null });
       fetchAdvances();
     } catch {
       toast.error('Failed to delete');
@@ -140,7 +144,7 @@ export default function WorkerAdvances() {
                   <div className="flex items-center gap-2 flex-shrink-0 ml-2">
                     <span className="text-sm font-bold text-red-400">{formatCurrency(adv.amount)}</span>
                     <button
-                      onClick={() => handleDelete(adv._id)}
+                      onClick={() => setDeleteConfirm({ open: true, id: adv._id })}
                       className="p-2 rounded-lg active:bg-red-400/10 text-gray-400 active:text-red-400 transition-colors"
                     >
                       <HiOutlineTrash className="w-4 h-4" />
@@ -193,7 +197,7 @@ export default function WorkerAdvances() {
                     <td className="py-3 px-4 text-sm text-gray-400">{adv.givenBy?.name}</td>
                     <td className="py-3 px-4 text-right">
                       <button
-                        onClick={() => handleDelete(adv._id)}
+                        onClick={() => setDeleteConfirm({ open: true, id: adv._id })}
                         className="p-1.5 rounded-lg hover:bg-red-400/10 text-gray-400 hover:text-red-400 transition-colors"
                         title="Delete"
                       >
@@ -274,6 +278,16 @@ export default function WorkerAdvances() {
           </div>
         </form>
       </Modal>
+
+      <ConfirmDialog
+        isOpen={deleteConfirm.open}
+        onClose={() => setDeleteConfirm({ open: false, id: null })}
+        onConfirm={handleDelete}
+        title="Delete Advance?"
+        message="Are you sure you want to delete this advance entry? This will affect the worker's salary calculation."
+        confirmText="Delete"
+        variant="danger"
+      />
     </div>
   );
 }

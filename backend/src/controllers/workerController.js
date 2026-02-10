@@ -10,10 +10,22 @@ const { logActivity } = require('../utils/activityLogger');
  * @route   POST /api/workers
  */
 const createWorker = asyncHandler(async (req, res) => {
-  const worker = await Worker.create({
+  const workerData = {
     ...req.body,
     createdBy: req.user._id,
-  });
+  };
+
+  // Initialize rate history with the starting rates
+  workerData.rateHistory = [
+    {
+      dailyWage: Number(req.body.dailyWage) || 0,
+      monthlySalary: Number(req.body.monthlySalary) || 0,
+      overtimeRate: Number(req.body.overtimeRate) || 0,
+      effectiveFrom: req.body.joiningDate || new Date(),
+    },
+  ];
+
+  const worker = await Worker.create(workerData);
 
   logActivity({
     action: 'WORKER_CREATED',
@@ -108,12 +120,53 @@ const getWorker = asyncHandler(async (req, res) => {
  * @route   PUT /api/workers/:id
  */
 const updateWorker = asyncHandler(async (req, res) => {
-  const worker = await Worker.findByIdAndUpdate(req.params.id, req.body, {
-    new: true,
-    runValidators: true,
-  });
-
+  const worker = await Worker.findById(req.params.id);
   if (!worker) throw new AppError('Worker not found', 404);
+
+  const { effectiveFrom, ...updateData } = req.body;
+
+  // Check if rate fields are changing
+  const rateChanged =
+    (updateData.dailyWage !== undefined && Number(updateData.dailyWage) !== worker.dailyWage) ||
+    (updateData.monthlySalary !== undefined && Number(updateData.monthlySalary) !== worker.monthlySalary) ||
+    (updateData.overtimeRate !== undefined && Number(updateData.overtimeRate) !== worker.overtimeRate);
+
+  if (rateChanged) {
+    const rateEffectiveFrom = effectiveFrom ? new Date(effectiveFrom) : new Date();
+
+    // Push new rate entry to history
+    worker.rateHistory.push({
+      dailyWage: Number(updateData.dailyWage ?? worker.dailyWage),
+      monthlySalary: Number(updateData.monthlySalary ?? worker.monthlySalary),
+      overtimeRate: Number(updateData.overtimeRate ?? worker.overtimeRate),
+      effectiveFrom: rateEffectiveFrom,
+    });
+
+    logActivity({
+      action: 'WORKER_RATE_UPDATED',
+      entity: 'worker',
+      entityId: worker._id,
+      description: `Worker "${worker.name}" rate updated effective ${rateEffectiveFrom.toLocaleDateString('en-IN')}`,
+      performedBy: req.user._id,
+      metadata: {
+        oldRates: {
+          dailyWage: worker.dailyWage,
+          monthlySalary: worker.monthlySalary,
+          overtimeRate: worker.overtimeRate,
+        },
+        newRates: {
+          dailyWage: Number(updateData.dailyWage ?? worker.dailyWage),
+          monthlySalary: Number(updateData.monthlySalary ?? worker.monthlySalary),
+          overtimeRate: Number(updateData.overtimeRate ?? worker.overtimeRate),
+        },
+        effectiveFrom: rateEffectiveFrom,
+      },
+    });
+  }
+
+  // Apply all updates
+  Object.assign(worker, updateData);
+  await worker.save();
 
   logActivity({
     action: 'WORKER_UPDATED',

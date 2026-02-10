@@ -6,6 +6,13 @@ import App from './App';
 import { AuthProvider } from './context/AuthContext';
 import './index.css';
 
+// Prevent scroll from changing number input values globally
+document.addEventListener('wheel', (e) => {
+  if (document.activeElement?.type === 'number') {
+    document.activeElement.blur();
+  }
+}, { passive: true });
+
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <BrowserRouter>

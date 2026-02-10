@@ -164,7 +164,8 @@ billSchema.pre('validate', function (next) {
   } else {
     discountAmount = this.discount;
   }
-  this.grandTotal = Math.round((this.subtotal - discountAmount) * 100) / 100;
+  const rawGrandTotal = this.subtotal - discountAmount;
+  this.grandTotal = Math.round(rawGrandTotal);
   if (this.grandTotal < 0) this.grandTotal = 0;
 
   // Calculate due

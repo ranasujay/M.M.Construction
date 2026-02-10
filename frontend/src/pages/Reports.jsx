@@ -106,7 +106,7 @@ export default function Reports() {
                     <td>{formatDate(b.createdAt)}</td>
                     <td>{formatCurrency(b.grandTotal)}</td>
                     <td className="text-emerald-400">{formatCurrency(b.totalPaid)}</td>
-                    <td className={b.dueAmount > 0 ? 'text-red-400' : ''}>{formatCurrency(b.dueAmount)}</td>
+                    <td className={b.dueAmount > 0 ? 'text-red-400 font-semibold' : ''}>{formatCurrency(b.dueAmount)}</td>
                     <td><span className={b.paymentStatus === 'PAID' ? 'badge-success' : b.paymentStatus === 'PARTIAL' ? 'badge-warning' : 'badge-danger'}>{b.paymentStatus}</span></td>
                   </tr>
                 ))}

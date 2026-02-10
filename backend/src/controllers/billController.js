@@ -8,18 +8,22 @@ const { asyncHandler, AppError } = require('../middleware/errorHandler');
 const { logActivity } = require('../utils/activityLogger');
 
 /**
- * Generate bill number: MM-YYYY-XXXX
+ * Generate bill number: MMC-YYYY-XXXX
  */
 const generateBillNumber = async () => {
   const year = new Date().getFullYear();
   const seq = await Counter.getNextSequence(`bill_${year}`);
-  return `MM-${year}-${String(seq).padStart(4, '0')}`;
+  return `MMC-${year}-${String(seq).padStart(4, '0')}`;
 };
 
 /**
  * Recalculate customer ledger totals from all their bills
  */
 const recalcCustomerLedger = async (customerId) => {
+  // Get customer for opening balance
+  const customerDoc = await Customer.findById(customerId);
+  const openingBalance = customerDoc?.openingBalance || 0;
+
   // Sum from bills
   const billResult = await Bill.aggregate([
     { $match: { customer: new mongoose.Types.ObjectId(customerId) } },
@@ -42,7 +46,7 @@ const recalcCustomerLedger = async (customerId) => {
     },
   ]);
 
-  const totalBilled = billResult[0]?.totalBilled || 0;
+  const totalBilled = (billResult[0]?.totalBilled || 0) + openingBalance;
   const totalPaid = payResult[0]?.totalPaid || 0;
 
   // Due = billed - paid (if positive); Advance = paid - billed (if positive)
@@ -415,8 +419,6 @@ const getChartData = asyncHandler(async (req, res) => {
       $group: {
         _id: groupBy,
         totalBilling: { $sum: '$grandTotal' },
-        totalPaid: { $sum: '$totalPaid' },
-        totalDue: { $sum: '$dueAmount' },
         billCount: { $sum: 1 },
       },
     },
@@ -462,6 +464,52 @@ const getChartData = asyncHandler(async (req, res) => {
   const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   const chartMap = new Map();
 
+  // Pre-fill all dates/months/years so there are no gaps in the chart
+  const now = new Date();
+  if (period === 'daily') {
+    for (let i = 29; i >= 0; i--) {
+      const d = new Date(now);
+      d.setDate(d.getDate() - i);
+      const label = `${d.getDate()}/${d.getMonth() + 1}`;
+      chartMap.set(label, {
+        label,
+        billing: 0,
+        paid: 0,
+        due: 0,
+        bills: 0,
+        collected: 0,
+        payments: 0,
+      });
+    }
+  } else if (period === 'monthly') {
+    for (let i = 11; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const label = `${monthNames[d.getMonth()]} ${d.getFullYear()}`;
+      chartMap.set(label, {
+        label,
+        billing: 0,
+        paid: 0,
+        due: 0,
+        bills: 0,
+        collected: 0,
+        payments: 0,
+      });
+    }
+  } else {
+    for (let i = 4; i >= 0; i--) {
+      const label = `${now.getFullYear() - i}`;
+      chartMap.set(label, {
+        label,
+        billing: 0,
+        paid: 0,
+        due: 0,
+        bills: 0,
+        collected: 0,
+        payments: 0,
+      });
+    }
+  }
+
   billingData.forEach((item) => {
     let label;
     if (period === 'daily') {
@@ -471,15 +519,18 @@ const getChartData = asyncHandler(async (req, res) => {
     } else {
       label = `${item._id.year}`;
     }
-    chartMap.set(label, {
+    const existing = chartMap.get(label) || {
       label,
-      billing: Math.round(item.totalBilling),
-      paid: Math.round(item.totalPaid),
-      due: Math.round(item.totalDue),
-      bills: item.billCount,
+      billing: 0,
+      paid: 0,
+      due: 0,
+      bills: 0,
       collected: 0,
       payments: 0,
-    });
+    };
+    existing.billing = Math.round(item.totalBilling);
+    existing.bills = item.billCount;
+    chartMap.set(label, existing);
   });
 
   paymentData.forEach((item) => {
@@ -491,24 +542,27 @@ const getChartData = asyncHandler(async (req, res) => {
     } else {
       label = `${item._id.year}`;
     }
-    if (chartMap.has(label)) {
-      chartMap.get(label).collected = Math.round(item.totalCollected);
-      chartMap.get(label).payments = item.paymentCount;
-    } else {
-      chartMap.set(label, {
-        label,
-        billing: 0,
-        paid: 0,
-        due: 0,
-        bills: 0,
-        collected: Math.round(item.totalCollected),
-        payments: item.paymentCount,
-      });
-    }
+    const existing = chartMap.get(label) || {
+      label,
+      billing: 0,
+      paid: 0,
+      due: 0,
+      bills: 0,
+      collected: 0,
+      payments: 0,
+    };
+    existing.collected = Math.round(item.totalCollected);
+    existing.payments = item.paymentCount;
+    chartMap.set(label, existing);
   });
 
-  // Convert to array, sort by original order
+  // Convert to array — Map preserves insertion order (pre-filled chronologically)
   const chartData = Array.from(chartMap.values());
+
+  // Calculate due as billing - collected per period (accurate cash-flow view)
+  chartData.forEach((entry) => {
+    entry.due = Math.max(0, entry.billing - entry.collected);
+  });
 
   res.json({
     success: true,

@@ -60,6 +60,12 @@ const customerSchema = new mongoose.Schema(
       trim: true,
       maxlength: 1000,
     },
+    // Opening balance — pre-existing dues when customer was first added
+    openingBalance: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
     createdBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',

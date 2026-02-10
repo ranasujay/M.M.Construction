@@ -15,8 +15,13 @@ const createCustomer = asyncHandler(async (req, res) => {
     throw new AppError(`Customer with phone ${req.body.phone} already exists (${existing.name})`, 400);
   }
 
+  const openingBalance = Number(req.body.openingBalance) || 0;
+
   const customer = await Customer.create({
     ...req.body,
+    openingBalance,
+    totalBilled: openingBalance,
+    currentDue: openingBalance,
     createdBy: req.user._id,
   });
 
@@ -24,7 +29,7 @@ const createCustomer = asyncHandler(async (req, res) => {
     action: 'CUSTOMER_CREATED',
     entity: 'customer',
     entityId: customer._id,
-    description: `Customer "${customer.name}" created`,
+    description: `Customer "${customer.name}" created${openingBalance > 0 ? ` with opening balance ₹${openingBalance}` : ''}`,
     performedBy: req.user._id,
   });
 
@@ -102,6 +107,7 @@ const getCustomerLedger = asyncHandler(async (req, res) => {
         totalPaid: customer.totalPaid,
         currentDue: customer.currentDue,
         advanceBalance: customer.advanceBalance || 0,
+        openingBalance: customer.openingBalance || 0,
         totalBills: bills.length,
         totalPayments: payments.length,
       },
@@ -118,7 +124,7 @@ const updateCustomer = asyncHandler(async (req, res) => {
   if (!customer) throw new AppError('Customer not found', 404);
 
   // Only allow updating specific fields
-  const allowed = ['name', 'phone', 'altPhone', 'address', 'notes', 'isActive'];
+  const allowed = ['name', 'phone', 'altPhone', 'address', 'notes', 'isActive', 'openingBalance'];
   allowed.forEach((field) => {
     if (req.body[field] !== undefined) {
       customer[field] = req.body[field];
@@ -132,6 +138,12 @@ const updateCustomer = asyncHandler(async (req, res) => {
   }
 
   await customer.save();
+
+  // Recalculate ledger if opening balance changed (imports recalcCustomerLedger from billController)
+  if (req.body.openingBalance !== undefined) {
+    const { recalcCustomerLedger } = require('./billController');
+    await recalcCustomerLedger(customer._id);
+  }
 
   logActivity({
     action: 'CUSTOMER_UPDATED',

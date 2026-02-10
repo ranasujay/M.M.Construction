@@ -38,8 +38,9 @@ const customerRules = [
 const productRules = [
   body('name').trim().notEmpty().withMessage('Product name is required'),
   body('category')
-    .isIn(['Grill', 'Shutter', 'Railing', 'Window', 'Gate', 'Custom'])
-    .withMessage('Invalid category'),
+    .trim()
+    .notEmpty()
+    .withMessage('Category is required'),
   body('baseRate').isFloat({ min: 0 }).withMessage('Base rate must be a positive number'),
   body('unit').isIn(['kg', 'sqft', 'piece', 'rft']).withMessage('Invalid unit'),
   body('fittingCharge').optional().isFloat({ min: 0 }),

@@ -5,6 +5,7 @@ import Modal from '../components/Modal';
 import { formatDateTime } from '../utils/helpers';
 import { HiOutlineUserAdd, HiOutlineShieldCheck, HiOutlineBan, HiOutlinePencil } from 'react-icons/hi';
 import toast from 'react-hot-toast';
+import ConfirmDialog from '../components/ConfirmDialog';
 
 export default function Users() {
   const [users, setUsers] = useState([]);
@@ -12,6 +13,8 @@ export default function Users() {
   const [showModal, setShowModal] = useState(false);
   const [form, setForm] = useState({ name: '', email: '', password: '', phone: '', role: 'staff' });
   const [submitting, setSubmitting] = useState(false);
+
+  const [confirmDialog, setConfirmDialog] = useState({ open: false, user: null });
 
   // Credential editing
   const [editModal, setEditModal] = useState(false);
@@ -52,10 +55,15 @@ export default function Users() {
     }
   };
 
-  const toggleStatus = async (userId, isActive) => {
+  const openToggleConfirm = (user) => setConfirmDialog({ open: true, user });
+
+  const toggleStatus = async () => {
+    const user = confirmDialog.user;
+    if (!user) return;
     try {
-      await api.put(`/auth/users/${userId}/status`, { isActive: !isActive });
-      toast.success(`User ${isActive ? 'deactivated' : 'activated'}`);
+      await api.put(`/auth/users/${user._id}/status`, { isActive: !user.isActive });
+      toast.success(`User ${user.isActive ? 'deactivated' : 'activated'}`);
+      setConfirmDialog({ open: false, user: null });
       fetchUsers();
     } catch (err) {
       toast.error(err.response?.data?.message || 'Failed');
@@ -147,7 +155,7 @@ export default function Users() {
               </button>
               {user.role !== 'owner' && (
                 <button
-                  onClick={() => toggleStatus(user._id, user.isActive)}
+                  onClick={() => openToggleConfirm(user)}
                   className={`flex-1 flex items-center justify-center gap-1 py-1.5 rounded-lg text-xs font-medium transition-colors ${
                     user.isActive
                       ? 'bg-red-500/10 text-red-400 hover:bg-red-500/20'
@@ -235,6 +243,16 @@ export default function Users() {
           </div>
         </form>
       </Modal>
+
+      <ConfirmDialog
+        isOpen={confirmDialog.open}
+        onClose={() => setConfirmDialog({ open: false, user: null })}
+        onConfirm={toggleStatus}
+        title={confirmDialog.user?.isActive ? 'Deactivate User?' : 'Activate User?'}
+        message={`Are you sure you want to ${confirmDialog.user?.isActive ? 'deactivate' : 'activate'} ${confirmDialog.user?.name || ''}? They ${confirmDialog.user?.isActive ? 'will not be able to login' : 'will be able to login again'}.`}
+        confirmText={confirmDialog.user?.isActive ? 'Deactivate' : 'Activate'}
+        variant={confirmDialog.user?.isActive ? 'danger' : 'success'}
+      />
     </div>
   );
 }

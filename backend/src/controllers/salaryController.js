@@ -33,17 +33,36 @@ const generateSalary = asyncHandler(async (req, res) => {
   const absentDays = attendance.filter((a) => a.status === 'Absent').length;
   const totalOvertimeHours = attendance.reduce((sum, a) => sum + (a.overtimeHours || 0), 0);
 
-  // Calculate gross salary
+  // Calculate gross salary using rate history (per-day basis for daily workers)
   let grossSalary = 0;
-  if (worker.salaryType === 'Daily') {
-    grossSalary = presentDays * (worker.dailyWage || 0);
-  } else {
-    // Monthly salary — pro-rata based on present days
-    grossSalary = worker.monthlySalary || 0;
-  }
+  let overtimeAmount = 0;
 
-  // Overtime amount
-  const overtimeAmount = totalOvertimeHours * (worker.overtimeRate || 0);
+  if (worker.salaryType === 'Daily') {
+    // For daily workers: calculate each present day using applicable rate
+    const presentRecords = attendance.filter((a) => a.status === 'Present');
+    for (const record of presentRecords) {
+      const rate = worker.getRateForDate(record.date);
+      grossSalary += rate.dailyWage || 0;
+    }
+    // Overtime: for each day with overtime, use applicable rate
+    for (const record of attendance) {
+      if (record.overtimeHours > 0) {
+        const rate = worker.getRateForDate(record.date);
+        overtimeAmount += record.overtimeHours * (rate.overtimeRate || 0);
+      }
+    }
+  } else {
+    // Monthly salary — use rate applicable at start of month
+    const rate = worker.getRateForDate(startDate);
+    grossSalary = rate.monthlySalary || 0;
+    // Overtime
+    for (const record of attendance) {
+      if (record.overtimeHours > 0) {
+        const rate = worker.getRateForDate(record.date);
+        overtimeAmount += record.overtimeHours * (rate.overtimeRate || 0);
+      }
+    }
+  }
 
   // Advances for the month
   const advances = await Advance.find({
@@ -104,14 +123,32 @@ const generateAllSalaries = asyncHandler(async (req, res) => {
     const absentDays = attendance.filter((a) => a.status === 'Absent').length;
     const totalOvertimeHours = attendance.reduce((sum, a) => sum + (a.overtimeHours || 0), 0);
 
+    // Calculate using rate history per day
     let grossSalary = 0;
-    if (worker.salaryType === 'Daily') {
-      grossSalary = presentDays * (worker.dailyWage || 0);
-    } else {
-      grossSalary = worker.monthlySalary || 0;
-    }
+    let overtimeAmount = 0;
 
-    const overtimeAmount = totalOvertimeHours * (worker.overtimeRate || 0);
+    if (worker.salaryType === 'Daily') {
+      const presentRecords = attendance.filter((a) => a.status === 'Present');
+      for (const record of presentRecords) {
+        const rate = worker.getRateForDate(record.date);
+        grossSalary += rate.dailyWage || 0;
+      }
+      for (const record of attendance) {
+        if (record.overtimeHours > 0) {
+          const rate = worker.getRateForDate(record.date);
+          overtimeAmount += record.overtimeHours * (rate.overtimeRate || 0);
+        }
+      }
+    } else {
+      const rate = worker.getRateForDate(startDate);
+      grossSalary = rate.monthlySalary || 0;
+      for (const record of attendance) {
+        if (record.overtimeHours > 0) {
+          const rate = worker.getRateForDate(record.date);
+          overtimeAmount += record.overtimeHours * (rate.overtimeRate || 0);
+        }
+      }
+    }
 
     const advances = await Advance.find({
       worker: worker._id,

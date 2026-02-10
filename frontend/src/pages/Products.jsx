@@ -4,25 +4,41 @@ import Modal from '../components/Modal';
 import Loader from '../components/Loader';
 import { formatCurrency } from '../utils/helpers';
 import toast from 'react-hot-toast';
-import { HiOutlinePlus, HiOutlinePencil } from 'react-icons/hi';
+import { HiOutlinePlus, HiOutlinePencil, HiOutlineTag, HiOutlineTrash } from 'react-icons/hi';
+import { useAuth } from '../context/AuthContext';
+import ConfirmDialog from '../components/ConfirmDialog';
 
-const CATEGORIES = ['Grill', 'Shutter', 'Railing', 'Window', 'Gate', 'Custom'];
 const UNITS = ['kg', 'sqft', 'piece', 'rft'];
 const FITTING_TYPES = ['per_kg', 'per_sqft', 'per_piece', 'fixed'];
 
 const defaultForm = {
-  name: '', category: 'Grill', baseRate: '', unit: 'kg',
+  name: '', category: '', baseRate: '', unit: 'kg',
   fittingCharge: '0', fittingChargeType: 'per_kg', description: '', isActive: true,
 };
 
 export default function Products() {
+  const { isOwner } = useAuth();
   const [products, setProducts] = useState([]);
+  const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filterCategory, setFilterCategory] = useState('');
   const [modalOpen, setModalOpen] = useState(false);
+  const [catModalOpen, setCatModalOpen] = useState(false);
+  const [deleteCatConfirm, setDeleteCatConfirm] = useState({ open: false, name: '' });
+  const [newCatName, setNewCatName] = useState('');
+  const [addingCat, setAddingCat] = useState(false);
   const [form, setForm] = useState(defaultForm);
   const [editingId, setEditingId] = useState(null);
   const [submitting, setSubmitting] = useState(false);
+
+  const fetchCategories = async () => {
+    try {
+      const { data } = await api.get('/products/categories');
+      setCategories(data.data);
+    } catch (err) {
+      console.error(err);
+    }
+  };
 
   const fetchProducts = async () => {
     try {
@@ -38,10 +54,11 @@ export default function Products() {
     }
   };
 
+  useEffect(() => { fetchCategories(); }, []);
   useEffect(() => { fetchProducts(); }, [filterCategory]);
 
   const openCreateModal = () => {
-    setForm(defaultForm);
+    setForm({ ...defaultForm, category: categories[0] || '' });
     setEditingId(null);
     setModalOpen(true);
   };
@@ -90,6 +107,35 @@ export default function Products() {
     }
   };
 
+  const handleAddCategory = async () => {
+    if (!newCatName.trim()) return;
+    setAddingCat(true);
+    try {
+      await api.post('/products/categories', { name: newCatName.trim() });
+      toast.success(`Category "${newCatName.trim()}" added`);
+      setNewCatName('');
+      fetchCategories();
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to add category');
+    } finally {
+      setAddingCat(false);
+    }
+  };
+
+  const handleDeleteCategory = async () => {
+    const name = deleteCatConfirm.name;
+    if (!name) return;
+    try {
+      await api.delete(`/products/categories/${encodeURIComponent(name)}`);
+      toast.success(`Category "${name}" deleted`);
+      if (filterCategory === name) setFilterCategory('');
+      setDeleteCatConfirm({ open: false, name: '' });
+      fetchCategories();
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to delete category');
+    }
+  };
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -103,7 +149,7 @@ export default function Products() {
       </div>
 
       {/* Category filter */}
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-wrap gap-2 items-center">
         <button
           onClick={() => setFilterCategory('')}
           className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${
@@ -112,7 +158,7 @@ export default function Products() {
         >
           All
         </button>
-        {CATEGORIES.map((cat) => (
+        {categories.map((cat) => (
           <button
             key={cat}
             onClick={() => setFilterCategory(cat)}
@@ -123,6 +169,14 @@ export default function Products() {
             {cat}
           </button>
         ))}
+        {isOwner && (
+          <button
+            onClick={() => setCatModalOpen(true)}
+            className="px-3 py-1.5 rounded-full text-sm font-medium transition-colors bg-dark-card text-primary-400 hover:bg-dark-hover border border-dashed border-primary-600/50 flex items-center gap-1"
+          >
+            <HiOutlineTag className="w-3.5 h-3.5" /> Add Category
+          </button>
+        )}
       </div>
 
       {loading ? <Loader /> : (
@@ -170,7 +224,7 @@ export default function Products() {
             <div>
               <label className="label">Category *</label>
               <select className="select" value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}>
-                {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+                {categories.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
             <div>
@@ -212,6 +266,59 @@ export default function Products() {
           </div>
         </form>
       </Modal>
+
+      {/* Category Modal */}
+      <Modal isOpen={catModalOpen} onClose={() => setCatModalOpen(false)} title="Manage Categories" size="sm">
+        <div className="space-y-4">
+          <div className="flex gap-2">
+            <input
+              className="input flex-1"
+              placeholder="New category name"
+              value={newCatName}
+              onChange={(e) => setNewCatName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  handleAddCategory();
+                }
+              }}
+            />
+            <button
+              onClick={handleAddCategory}
+              disabled={addingCat || !newCatName.trim()}
+              className="btn-primary !py-2 !px-4 text-sm whitespace-nowrap"
+            >
+              {addingCat ? 'Adding...' : 'Add'}
+            </button>
+          </div>
+          <div className="space-y-1 max-h-60 overflow-y-auto">
+            {categories.map((cat) => (
+              <div key={cat} className="flex items-center justify-between px-3 py-2 rounded-lg bg-dark-bg border border-dark-border">
+                <span className="text-sm text-gray-200">{cat}</span>
+                {!['Grill', 'Shutter', 'Railing', 'Window', 'Gate', 'Custom'].includes(cat) && (
+                  <button
+                    onClick={() => setDeleteCatConfirm({ open: true, name: cat })}
+                    className="text-red-400 hover:text-red-300 p-1"
+                    title="Delete category"
+                  >
+                    <HiOutlineTrash className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      </Modal>
+
+      <ConfirmDialog
+        isOpen={deleteCatConfirm.open}
+        onClose={() => setDeleteCatConfirm({ open: false, name: '' })}
+        onConfirm={handleDeleteCategory}
+        title="Delete Category?"
+        message={`Are you sure you want to delete "${deleteCatConfirm.name}"? Products in this category won't be deleted but will become uncategorized.`}
+        confirmText="Delete"
+        variant="danger"
+      />
     </div>
   );
 }

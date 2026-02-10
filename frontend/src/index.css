@@ -19,6 +19,10 @@
   input[type="number"] {
     -moz-appearance: textfield;
   }
+  /* Disable scroll-to-change on number inputs */
+  input[type="number"] {
+    overscroll-behavior: none;
+  }
   ::-webkit-scrollbar {
     @apply w-2;
   }

@@ -17,7 +17,7 @@ export default function Customers() {
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [modalOpen, setModalOpen] = useState(false);
-  const [form, setForm] = useState({ name: '', phone: '', altPhone: '', address: '', notes: '' });
+  const [form, setForm] = useState({ name: '', phone: '', altPhone: '', address: '', notes: '', openingBalance: '' });
   const [editingId, setEditingId] = useState(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -54,7 +54,7 @@ export default function Customers() {
   };
 
   const openCreateModal = () => {
-    setForm({ name: '', phone: '', altPhone: '', address: '', notes: '' });
+    setForm({ name: '', phone: '', altPhone: '', address: '', notes: '', openingBalance: '' });
     setEditingId(null);
     setModalOpen(true);
   };
@@ -66,6 +66,7 @@ export default function Customers() {
       altPhone: customer.altPhone || '',
       address: customer.address || '',
       notes: customer.notes || '',
+      openingBalance: customer.openingBalance || '',
     });
     setEditingId(customer._id);
     setModalOpen(true);
@@ -220,9 +221,16 @@ export default function Customers() {
             <label className="label">Address *</label>
             <input className="input" value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} placeholder="Full address" required />
           </div>
-          <div>
-            <label className="label">Notes</label>
-            <textarea className="input" rows="2" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} placeholder="Any notes..." />
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="label">Opening Balance (₹)</label>
+              <input type="number" min="0" className="input" value={form.openingBalance} onChange={(e) => setForm({ ...form, openingBalance: e.target.value })} placeholder="Pre-existing due amount" />
+              <p className="text-[10px] text-gray-500 mt-0.5">Any due before using this system</p>
+            </div>
+            <div>
+              <label className="label">Notes</label>
+              <textarea className="input" rows="2" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} placeholder="Any notes..." />
+            </div>
           </div>
           <div className="flex justify-end gap-3 pt-2">
             <button type="button" onClick={() => setModalOpen(false)} className="btn-secondary">Cancel</button>

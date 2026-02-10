@@ -24,12 +24,21 @@ const activityLogSchema = new mongoose.Schema(
         'USER_CREATED',
         'USER_STATUS_CHANGED',
         'USER_CREDENTIALS_UPDATED',
+        'WORKER_CREATED',
+        'WORKER_UPDATED',
+        'WORKER_ACTIVATED',
+        'WORKER_DEACTIVATED',
+        'WORKER_RATE_UPDATED',
+        'SALARY_GENERATED',
+        'SALARY_PAID',
+        'CATEGORY_CREATED',
+        'CATEGORY_DELETED',
       ],
     },
     entity: {
       type: String,
       required: true,
-      enum: ['bill', 'payment', 'customer', 'product', 'promise', 'user'],
+      enum: ['bill', 'payment', 'customer', 'product', 'promise', 'user', 'worker', 'salary', 'category'],
     },
     entityId: {
       type: mongoose.Schema.Types.ObjectId,
@@ -58,5 +67,8 @@ const activityLogSchema = new mongoose.Schema(
 activityLogSchema.index({ createdAt: -1 });
 activityLogSchema.index({ entity: 1, entityId: 1 });
 activityLogSchema.index({ performedBy: 1 });
+
+// Auto-delete logs older than 30 days
+activityLogSchema.index({ createdAt: 1 }, { expireAfterSeconds: 30 * 24 * 60 * 60 });
 
 module.exports = mongoose.model('ActivityLog', activityLogSchema);

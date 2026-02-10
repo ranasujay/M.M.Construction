@@ -35,6 +35,7 @@ const navItems = [
 ];
 
 const ownerItems = [
+  { path: '/product-sales', label: 'Product Sales', icon: HiOutlineChartBar },
   { path: '/activity-logs', label: 'Activity Logs', icon: HiOutlineClipboardList },
   { path: '/users', label: 'Users', icon: HiOutlineUserGroup },
 ];

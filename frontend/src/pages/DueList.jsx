@@ -248,7 +248,7 @@ export default function DueList() {
                       <td>{c.phone}</td>
                       <td>{formatCurrency(c.totalBilled)}</td>
                       <td>{formatCurrency(c.totalPaid)}</td>
-                      <td style={{ fontWeight: '700' }}>{formatCurrency(c.currentDue)}</td>
+                      <td style={{ fontWeight: '700', color: '#f87171' }}>{formatCurrency(c.currentDue)}</td>
                       <td>{c.nextPromiseDate ? `${formatDate(c.nextPromiseDate)} — ${formatCurrency(c.nextPromiseAmount)}` : '-'}</td>
                     </tr>
                   ))}
@@ -256,7 +256,7 @@ export default function DueList() {
                 <tfoot>
                   <tr>
                     <td colSpan="5" style={{ textAlign: 'right', fontWeight: '700' }}>Total Outstanding</td>
-                    <td style={{ fontWeight: '700' }}>{formatCurrency(totalDue)}</td>
+                    <td style={{ fontWeight: '700', color: '#f87171' }}>{formatCurrency(totalDue)}</td>
                     <td></td>
                   </tr>
                 </tfoot>

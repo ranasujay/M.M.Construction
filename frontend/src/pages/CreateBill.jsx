@@ -26,6 +26,7 @@ export default function CreateBill() {
     customerName: '',
     items: [{ product: '', quantity: '', rate: '', unit: 'kg', hasFitting: false }],
     fittingRate: '',
+    fittingMode: 'per_weight', // 'per_weight' or 'fixed'
     discount: 0,
     discountType: 'flat',
     advancePayment: 0,
@@ -135,17 +136,19 @@ export default function CreateBill() {
     return qty * rate;
   };
 
-  // Fitting: sum of weights of checked items × single fitting rate
+  // Fitting: per_weight = sum of weights × rate, fixed = flat amount
   const fittingWeight = form.items
     .filter((item) => item.hasFitting)
     .reduce((sum, item) => sum + (parseFloat(item.quantity) || 0), 0);
   const fittingRateNum = parseFloat(form.fittingRate) || 0;
-  const totalFittingCharge = Math.round(fittingWeight * fittingRateNum * 100) / 100;
+  const totalFittingCharge = form.fittingMode === 'fixed'
+    ? fittingRateNum
+    : Math.round(fittingWeight * fittingRateNum * 100) / 100;
   const hasFittingItems = form.items.some((item) => item.hasFitting);
 
   const subtotal = form.items.reduce((sum, item) => sum + calculateLineTotal(item), 0);
   const discountAmount = form.discountType === 'percent' ? (subtotal * (form.discount || 0)) / 100 : (form.discount || 0);
-  const grandTotal = Math.max(0, subtotal + totalFittingCharge - discountAmount);
+  const grandTotal = Math.max(0, Math.round(subtotal + totalFittingCharge - discountAmount));
   const dueAmount = Math.max(0, grandTotal - (form.advancePayment || 0));
 
   const handleSubmit = async (e) => {
@@ -162,14 +165,34 @@ export default function CreateBill() {
     try {
       const payload = {
         customer: form.customer,
-        items: form.items.map((item) => ({
-          product: item.product,
-          quantity: parseFloat(item.quantity),
-          rate: parseFloat(item.rate),
-          fittingCharge: item.hasFitting ? fittingRateNum : 0,
-          fittingChargeType: 'per_kg',
-          unit: item.unit,
-        })),
+        items: (() => {
+          let fittingAssigned = false;
+          return form.items.map((item) => {
+            let fc = 0;
+            let fct = 'per_kg';
+            if (item.hasFitting) {
+              if (form.fittingMode === 'fixed') {
+                // Only assign fixed charge to first fitting item
+                if (!fittingAssigned) {
+                  fc = fittingRateNum;
+                  fittingAssigned = true;
+                }
+                fct = 'fixed';
+              } else {
+                fc = fittingRateNum;
+                fct = 'per_kg';
+              }
+            }
+            return {
+              product: item.product,
+              quantity: parseFloat(item.quantity),
+              rate: parseFloat(item.rate),
+              fittingCharge: fc,
+              fittingChargeType: fct,
+              unit: item.unit,
+            };
+          });
+        })(),
         discount: parseFloat(form.discount) || 0,
         discountType: form.discountType,
         advancePayment: parseFloat(form.advancePayment) || 0,
@@ -370,12 +393,50 @@ export default function CreateBill() {
             {hasFittingItems && (
               <div className="p-3 bg-primary-900/20 rounded-lg border border-primary-800/40 space-y-2">
                 <div className="flex items-center justify-between">
-                  <label className="text-[10px] text-gray-400 uppercase font-semibold">⚙ Fitting Rate ₹ / unit</label>
-                  <span className="text-[10px] text-gray-500">Fitting Wt: {fittingWeight.toFixed(2)}</span>
+                  <label className="text-[10px] text-gray-400 uppercase font-semibold">⚙ Fitting Charge</label>
+                  {form.fittingMode === 'per_weight' && (
+                    <span className="text-[10px] text-gray-500">Fitting Wt: {fittingWeight.toFixed(2)}</span>
+                  )}
                 </div>
-                <input type="number" step="0.01" className="input !py-2 text-sm" value={form.fittingRate} onChange={(e) => setForm({ ...form, fittingRate: e.target.value })} placeholder="Enter fitting rate" />
+                {/* Fitting mode toggle */}
+                <div className="flex rounded-lg overflow-hidden border border-dark-border">
+                  <button
+                    type="button"
+                    onClick={() => setForm({ ...form, fittingMode: 'per_weight' })}
+                    className={`flex-1 py-1.5 text-xs font-medium transition-colors ${
+                      form.fittingMode === 'per_weight'
+                        ? 'bg-primary-600 text-white'
+                        : 'bg-dark-bg text-gray-400 hover:bg-dark-hover'
+                    }`}
+                  >
+                    Per Weight
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setForm({ ...form, fittingMode: 'fixed' })}
+                    className={`flex-1 py-1.5 text-xs font-medium transition-colors ${
+                      form.fittingMode === 'fixed'
+                        ? 'bg-primary-600 text-white'
+                        : 'bg-dark-bg text-gray-400 hover:bg-dark-hover'
+                    }`}
+                  >
+                    Fixed Cost
+                  </button>
+                </div>
+                <input
+                  type="number"
+                  step="0.01"
+                  className="input !py-2 text-sm"
+                  value={form.fittingRate}
+                  onChange={(e) => setForm({ ...form, fittingRate: e.target.value })}
+                  placeholder={form.fittingMode === 'fixed' ? 'Enter total fitting cost' : 'Enter fitting rate per unit'}
+                />
                 {totalFittingCharge > 0 && (
-                  <p className="text-xs text-primary-400">{fittingWeight.toFixed(2)} × ₹{fittingRateNum} = {formatCurrency(totalFittingCharge)}</p>
+                  <p className="text-xs text-primary-400">
+                    {form.fittingMode === 'fixed'
+                      ? `Fixed: ${formatCurrency(totalFittingCharge)}`
+                      : `${fittingWeight.toFixed(2)} × ₹${fittingRateNum} = ${formatCurrency(totalFittingCharge)}`}
+                  </p>
                 )}
               </div>
             )}
@@ -392,12 +453,12 @@ export default function CreateBill() {
               </div>
             </div>
             <div>
-              <label className="text-[10px] text-gray-500 uppercase">Advance ₹</label>
+              <label className="text-[10px] text-gray-500 uppercase">Payment ₹</label>
               <input type="number" step="0.01" className="input !py-2 text-sm" value={form.advancePayment} onChange={(e) => setForm({ ...form, advancePayment: e.target.value })} />
             </div>
             {(parseFloat(form.advancePayment) || 0) > 0 && (
               <div>
-                <label className="text-[10px] text-gray-500 uppercase">Advance Mode</label>
+                <label className="text-[10px] text-gray-500 uppercase">Payment Mode</label>
                 <select className="select !py-2 text-sm" value={form.advancePaymentMode} onChange={(e) => setForm({ ...form, advancePaymentMode: e.target.value })}>
                   <option value="Cash">Cash</option>
                   <option value="UPI">UPI</option>
@@ -421,7 +482,12 @@ export default function CreateBill() {
             <div className="space-y-2 text-sm">
               <div className="flex justify-between"><span className="text-gray-400">Subtotal</span><span className="text-gray-200">{formatCurrency(subtotal)}</span></div>
               {totalFittingCharge > 0 && (
-                <div className="flex justify-between"><span className="text-gray-400">Fitting ({fittingWeight.toFixed(2)} × ₹{fittingRateNum})</span><span className="text-primary-400">+{formatCurrency(totalFittingCharge)}</span></div>
+                <div className="flex justify-between">
+                  <span className="text-gray-400">
+                    Fitting {form.fittingMode === 'fixed' ? '(Fixed)' : `(${fittingWeight.toFixed(2)} × ₹${fittingRateNum})`}
+                  </span>
+                  <span className="text-primary-400">+{formatCurrency(totalFittingCharge)}</span>
+                </div>
               )}
               {discountAmount > 0 && (
                 <div className="flex justify-between"><span className="text-gray-400">Discount {form.discountType === 'percent' ? `(${form.discount}%)` : ''}</span><span className="text-red-400">-{formatCurrency(discountAmount)}</span></div>
@@ -430,7 +496,7 @@ export default function CreateBill() {
                 <span className="text-gray-200">Grand Total</span><span className="text-primary-400">{formatCurrency(grandTotal)}</span>
               </div>
               {(form.advancePayment || 0) > 0 && (
-                <div className="flex justify-between"><span className="text-gray-400">Advance</span><span className="text-emerald-400">-{formatCurrency(form.advancePayment)}</span></div>
+                <div className="flex justify-between"><span className="text-gray-400">Payment</span><span className="text-emerald-400">-{formatCurrency(form.advancePayment)}</span></div>
               )}
               <div className="flex justify-between text-base font-bold border-t border-dark-border pt-2">
                 <span className="text-gray-200">Due</span>
