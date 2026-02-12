@@ -21,7 +21,7 @@ const productSchema = new mongoose.Schema(
     unit: {
       type: String,
       required: [true, 'Unit is required'],
-      enum: ['kg', 'sqft', 'piece', 'rft'],
+      enum: ['kg', 'sqft', 'piece', 'rft', 'meter', 'foot'],
       default: 'kg',
     },
     fittingCharge: {
@@ -31,7 +31,7 @@ const productSchema = new mongoose.Schema(
     },
     fittingChargeType: {
       type: String,
-      enum: ['per_kg', 'per_sqft', 'per_piece', 'fixed'],
+      enum: ['per_kg', 'per_sqft', 'per_piece', 'per_rft', 'per_meter', 'per_foot', 'fixed'],
       default: 'per_kg',
     },
     description: {
@@ -47,6 +47,20 @@ const productSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
     },
+    materialConsumption: [
+      {
+        rawMaterial: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: 'RawMaterial',
+          required: true,
+        },
+        quantityPerUnit: {
+          type: Number,
+          required: true,
+          min: 0,
+        },
+      },
+    ],
   },
   {
     timestamps: true,
@@ -55,5 +69,6 @@ const productSchema = new mongoose.Schema(
 
 productSchema.index({ category: 1 });
 productSchema.index({ isActive: 1 });
+productSchema.index({ name: 1, category: 1 }, { unique: true });
 
 module.exports = mongoose.model('Product', productSchema);

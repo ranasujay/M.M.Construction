@@ -18,6 +18,11 @@ const workerRoutes = require('./routes/workerRoutes');
 const attendanceRoutes = require('./routes/attendanceRoutes');
 const advanceRoutes = require('./routes/advanceRoutes');
 const salaryRoutes = require('./routes/salaryRoutes');
+const rawMaterialRoutes = require('./routes/rawMaterialRoutes');
+const purchaseRoutes = require('./routes/purchaseRoutes');
+const stockLogRoutes = require('./routes/stockLogRoutes');
+const supplierRoutes = require('./routes/supplierRoutes');
+const customExpenseRoutes = require('./routes/customExpenseRoutes');
 
 const app = express();
 
@@ -51,6 +56,11 @@ app.use('/api/workers', workerRoutes);
 app.use('/api/attendance', attendanceRoutes);
 app.use('/api/advances/worker', advanceRoutes);
 app.use('/api/salary', salaryRoutes);
+app.use('/api/raw-materials', rawMaterialRoutes);
+app.use('/api/purchases', purchaseRoutes);
+app.use('/api/stock-logs', stockLogRoutes);
+app.use('/api/suppliers', supplierRoutes);
+app.use('/api/custom-expenses', customExpenseRoutes);
 
 // ─── Health Check ────────────────────────────────────────────────────
 app.get('/api/health', (req, res) => {

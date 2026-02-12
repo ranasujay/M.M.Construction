@@ -4,6 +4,8 @@ const Customer = require('../models/Customer');
 const Product = require('../models/Product');
 const Payment = require('../models/Payment');
 const Counter = require('../models/Counter');
+const RawMaterial = require('../models/RawMaterial');
+const StockLog = require('../models/StockLog');
 const { asyncHandler, AppError } = require('../middleware/errorHandler');
 const { logActivity } = require('../utils/activityLogger');
 
@@ -59,6 +61,49 @@ const recalcCustomerLedger = async (customerId) => {
     currentDue,
     advanceBalance: advance,
   });
+};
+
+/**
+ * Deduct raw material stock based on product materialConsumption mappings.
+ * Allows negative stock — never blocks billing.
+ */
+const deductStockForBill = async (bill, userId) => {
+  try {
+    for (const item of bill.items) {
+      // Get full product with materialConsumption populated
+      const product = await Product.findById(item.product).populate('materialConsumption.rawMaterial');
+      if (!product || !product.materialConsumption || product.materialConsumption.length === 0) {
+        continue; // No consumption mapping → skip
+      }
+
+      for (const mc of product.materialConsumption) {
+        if (!mc.rawMaterial) continue;
+
+        const deductQty = Math.round(item.quantity * mc.quantityPerUnit * 100) / 100;
+        if (deductQty === 0) continue;
+
+        const material = await RawMaterial.findById(mc.rawMaterial._id || mc.rawMaterial);
+        if (!material) continue;
+
+        material.currentStock = Math.round((material.currentStock - deductQty) * 100) / 100;
+        await material.save();
+
+        await StockLog.create({
+          rawMaterial: material._id,
+          changeType: 'SALE',
+          quantityChanged: -deductQty,
+          balanceAfter: material.currentStock,
+          relatedDocument: bill._id,
+          relatedDocumentType: 'Bill',
+          notes: `Bill ${bill.billNumber}: ${item.productName} × ${item.quantity}`,
+          performedBy: userId,
+        });
+      }
+    }
+  } catch (err) {
+    // Log error but NEVER block the bill
+    console.error('[Stock Deduction Error]', err.message);
+  }
 };
 
 /**
@@ -163,6 +208,9 @@ const createBill = asyncHandler(async (req, res) => {
 
   // Recalculate customer ledger (after all payments recorded)
   await recalcCustomerLedger(customer);
+
+  // Deduct raw material stock based on product consumption mappings
+  await deductStockForBill(bill, req.user._id);
 
   // Populate for response
   const populated = await Bill.findById(bill._id)
@@ -571,10 +619,103 @@ const getChartData = asyncHandler(async (req, res) => {
   });
 });
 
+/**
+ * @desc    Get profit analysis for a bill (owner only)
+ * @route   GET /api/bills/:id/profit
+ */
+const getBillProfit = asyncHandler(async (req, res) => {
+  const bill = await Bill.findById(req.params.id);
+  if (!bill) throw new AppError('Bill not found', 404);
+
+  const PurchaseBill = require('../models/PurchaseBill');
+
+  // Get average purchase rates for all materials
+  const avgRates = await PurchaseBill.aggregate([
+    { $unwind: '$items' },
+    {
+      $group: {
+        _id: '$items.rawMaterial',
+        totalQty: { $sum: '$items.quantity' },
+        totalCost: { $sum: '$items.totalCost' },
+      },
+    },
+  ]);
+  const materialRateMap = {};
+  avgRates.forEach((r) => {
+    materialRateMap[r._id.toString()] = r.totalQty > 0 ? r.totalCost / r.totalQty : 0;
+  });
+
+  // Get products with consumption data
+  const productIds = bill.items.map((i) => i.product).filter(Boolean);
+  const products = await Product.find({ _id: { $in: productIds } })
+    .select('materialConsumption')
+    .populate('materialConsumption.rawMaterial', 'name unit')
+    .lean();
+
+  const productMap = {};
+  products.forEach((p) => {
+    productMap[p._id.toString()] = p.materialConsumption || [];
+  });
+
+  let totalCost = 0;
+  const itemProfits = bill.items.map((item) => {
+    const consumption = productMap[item.product?.toString()] || [];
+    let costPerUnit = 0;
+    const materials = [];
+
+    consumption.forEach((mc) => {
+      const matId = mc.rawMaterial?._id?.toString() || mc.rawMaterial?.toString();
+      const purchaseRate = materialRateMap[matId] || 0;
+      const matCost = mc.quantityPerUnit * purchaseRate;
+      costPerUnit += matCost;
+      materials.push({
+        name: mc.rawMaterial?.name || 'Unknown',
+        unit: mc.rawMaterial?.unit || '',
+        qtyPerUnit: mc.quantityPerUnit,
+        rate: Math.round(purchaseRate * 100) / 100,
+        cost: Math.round(matCost * 100) / 100,
+      });
+    });
+
+    const itemCost = Math.round(item.quantity * costPerUnit * 100) / 100;
+    const itemProfit = Math.round((item.lineTotal - itemCost) * 100) / 100;
+    totalCost += itemCost;
+
+    return {
+      productName: item.productName,
+      category: item.category,
+      quantity: item.quantity,
+      rate: item.rate,
+      lineTotal: item.lineTotal,
+      costPerUnit: Math.round(costPerUnit * 100) / 100,
+      totalCost: itemCost,
+      profit: itemProfit,
+      profitMargin: item.lineTotal > 0 ? Math.round((itemProfit / item.lineTotal) * 10000) / 100 : 0,
+      hasCostData: consumption.length > 0,
+      materials,
+    };
+  });
+
+  totalCost = Math.round(totalCost * 100) / 100;
+  const totalProfit = Math.round((bill.grandTotal - totalCost) * 100) / 100;
+
+  res.json({
+    success: true,
+    data: {
+      billTotal: bill.grandTotal,
+      totalCost,
+      totalProfit,
+      profitMargin: bill.grandTotal > 0 ? Math.round((totalProfit / bill.grandTotal) * 10000) / 100 : 0,
+      items: itemProfits,
+    },
+  });
+});
+
 module.exports = {
   createBill,
   getBills,
   getBill,
+  getBillProfit,
   updateBill,
   getBillStats,
   getChartData,

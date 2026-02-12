@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import api from '../services/api';
+import { getRawMaterials } from '../services/stockApi';
 import Modal from '../components/Modal';
 import Loader from '../components/Loader';
 import { formatCurrency } from '../utils/helpers';
@@ -8,12 +9,13 @@ import { HiOutlinePlus, HiOutlinePencil, HiOutlineTag, HiOutlineTrash } from 're
 import { useAuth } from '../context/AuthContext';
 import ConfirmDialog from '../components/ConfirmDialog';
 
-const UNITS = ['kg', 'sqft', 'piece', 'rft'];
-const FITTING_TYPES = ['per_kg', 'per_sqft', 'per_piece', 'fixed'];
+const UNITS = ['kg', 'sqft', 'piece', 'rft', 'meter', 'foot'];
+const FITTING_TYPES = ['per_kg', 'per_sqft', 'per_piece', 'per_rft', 'per_meter', 'per_foot', 'fixed'];
 
 const defaultForm = {
   name: '', category: '', baseRate: '', unit: 'kg',
   fittingCharge: '0', fittingChargeType: 'per_kg', description: '', isActive: true,
+  materialConsumption: [],
 };
 
 export default function Products() {
@@ -25,6 +27,7 @@ export default function Products() {
   const [modalOpen, setModalOpen] = useState(false);
   const [catModalOpen, setCatModalOpen] = useState(false);
   const [deleteCatConfirm, setDeleteCatConfirm] = useState({ open: false, name: '' });
+  const [rawMaterials, setRawMaterials] = useState([]);
   const [newCatName, setNewCatName] = useState('');
   const [addingCat, setAddingCat] = useState(false);
   const [form, setForm] = useState(defaultForm);
@@ -55,10 +58,15 @@ export default function Products() {
   };
 
   useEffect(() => { fetchCategories(); }, []);
+  useEffect(() => {
+    if (isOwner) {
+      getRawMaterials({ active: 'true' }).then(({ data }) => setRawMaterials(data.data)).catch(() => {});
+    }
+  }, [isOwner]);
   useEffect(() => { fetchProducts(); }, [filterCategory]);
 
   const openCreateModal = () => {
-    setForm({ ...defaultForm, category: categories[0] || '' });
+    setForm({ ...defaultForm, category: categories[0] || '', materialConsumption: [] });
     setEditingId(null);
     setModalOpen(true);
   };
@@ -73,6 +81,10 @@ export default function Products() {
       fittingChargeType: product.fittingChargeType || 'per_kg',
       description: product.description || '',
       isActive: product.isActive,
+      materialConsumption: (product.materialConsumption || []).map((mc) => ({
+        rawMaterial: mc.rawMaterial?._id || mc.rawMaterial,
+        quantityPerUnit: mc.quantityPerUnit?.toString() || '0',
+      })),
     });
     setEditingId(product._id);
     setModalOpen(true);
@@ -90,6 +102,12 @@ export default function Products() {
         ...form,
         baseRate: parseFloat(form.baseRate),
         fittingCharge: parseFloat(form.fittingCharge) || 0,
+        materialConsumption: form.materialConsumption
+          .filter((mc) => mc.rawMaterial && mc.quantityPerUnit)
+          .map((mc) => ({
+            rawMaterial: mc.rawMaterial,
+            quantityPerUnit: parseFloat(mc.quantityPerUnit),
+          })),
       };
       if (editingId) {
         await api.put(`/products/${editingId}`, payload);
@@ -252,6 +270,81 @@ export default function Products() {
             <label className="label">Description</label>
             <textarea className="input" rows="2" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
           </div>
+
+          {/* Material Consumption Mapping (Owner only) */}
+          {isOwner && rawMaterials.length > 0 && (
+            <div className="border border-dark-border rounded-lg p-3 space-y-3">
+              <div className="flex items-center justify-between">
+                <label className="label !mb-0">Material Consumption</label>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setForm({
+                      ...form,
+                      materialConsumption: [...form.materialConsumption, { rawMaterial: '', quantityPerUnit: '' }],
+                    })
+                  }
+                  className="text-xs text-primary-400 hover:text-primary-300 flex items-center gap-1"
+                >
+                  <HiOutlinePlus className="w-3.5 h-3.5" /> Add Material
+                </button>
+              </div>
+              {form.materialConsumption.length === 0 && (
+                <p className="text-xs text-gray-500 italic">No materials mapped. Add materials to track stock consumption when this product is billed.</p>
+              )}
+              {form.materialConsumption.map((mc, idx) => (
+                <div key={idx} className="flex gap-2 items-start">
+                  <div className="flex-1 min-w-0">
+                    <select
+                      className="select text-sm"
+                      value={mc.rawMaterial}
+                      onChange={(e) => {
+                        const updated = [...form.materialConsumption];
+                        updated[idx] = { ...updated[idx], rawMaterial: e.target.value };
+                        setForm({ ...form, materialConsumption: updated });
+                      }}
+                    >
+                      <option value="">Select material</option>
+                      {rawMaterials.map((rm) => (
+                        <option key={rm._id} value={rm._id}>
+                          {rm.name} ({rm.unit})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="w-28 shrink-0">
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      className="input text-sm"
+                      placeholder="Qty/unit"
+                      value={mc.quantityPerUnit}
+                      onChange={(e) => {
+                        const updated = [...form.materialConsumption];
+                        updated[idx] = { ...updated[idx], quantityPerUnit: e.target.value };
+                        setForm({ ...form, materialConsumption: updated });
+                      }}
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const updated = form.materialConsumption.filter((_, i) => i !== idx);
+                      setForm({ ...form, materialConsumption: updated });
+                    }}
+                    className="mt-1.5 text-red-400 hover:text-red-300"
+                  >
+                    <HiOutlineTrash className="w-4 h-4" />
+                  </button>
+                </div>
+              ))}
+              {form.materialConsumption.length > 0 && (
+                <p className="text-xs text-gray-500">Qty/unit = how much raw material is consumed per 1 {form.unit} of this product.</p>
+              )}
+            </div>
+          )}
+
           {editingId && (
             <div className="flex items-center gap-2">
               <input type="checkbox" id="isActive" checked={form.isActive} onChange={(e) => setForm({ ...form, isActive: e.target.checked })} className="w-4 h-4 rounded" />

@@ -23,7 +23,7 @@ const lineItemSchema = new mongoose.Schema(
     unit: {
       type: String,
       required: true,
-      enum: ['kg', 'sqft', 'piece', 'rft'],
+      enum: ['kg', 'sqft', 'piece', 'rft', 'meter', 'foot'],
     },
     rate: {
       type: Number,
@@ -37,7 +37,7 @@ const lineItemSchema = new mongoose.Schema(
     },
     fittingChargeType: {
       type: String,
-      enum: ['per_kg', 'per_sqft', 'per_piece', 'fixed'],
+      enum: ['per_kg', 'per_sqft', 'per_piece', 'per_rft', 'per_meter', 'per_foot', 'fixed'],
       default: 'per_kg',
     },
     lineTotal: {
@@ -142,6 +142,9 @@ billSchema.pre('validate', function (next) {
         case 'per_kg':
         case 'per_sqft':
         case 'per_piece':
+        case 'per_rft':
+        case 'per_meter':
+        case 'per_foot':
           fittingAmount = item.quantity * item.fittingCharge;
           break;
         case 'fixed':

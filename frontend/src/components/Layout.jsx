@@ -20,6 +20,10 @@ import {
   HiOutlineBriefcase,
   HiOutlineCalculator,
   HiOutlineViewGrid,
+  HiOutlineDatabase,
+  HiOutlineShoppingCart,
+  HiOutlineClipboard,
+  HiOutlineAdjustments,
 } from 'react-icons/hi';
 
 const navItems = [
@@ -38,6 +42,15 @@ const ownerItems = [
   { path: '/product-sales', label: 'Product Sales', icon: HiOutlineChartBar },
   { path: '/activity-logs', label: 'Activity Logs', icon: HiOutlineClipboardList },
   { path: '/users', label: 'Users', icon: HiOutlineUserGroup },
+];
+
+const stockModuleItems = [
+  { path: '/stock-dashboard', label: 'Stock Overview', icon: HiOutlineViewGrid },
+  { path: '/raw-materials', label: 'Raw Materials', icon: HiOutlineDatabase },
+  { path: '/suppliers', label: 'Suppliers', icon: HiOutlineUsers },
+  { path: '/purchases', label: 'Purchases', icon: HiOutlineShoppingCart },
+  { path: '/purchase-expenses', label: 'Expenses', icon: HiOutlineAdjustments },
+  { path: '/stock-logs', label: 'Stock Logs', icon: HiOutlineClipboard },
 ];
 
 const workerModuleItems = [
@@ -59,6 +72,7 @@ export default function Layout() {
   };
 
   const allNavItems = isOwner ? [...navItems, ...ownerItems] : navItems;
+  const stockNav = isOwner ? stockModuleItems : [];
   const workerNav = isOwner ? workerModuleItems : [];
 
   const SidebarContent = () => (
@@ -89,6 +103,32 @@ export default function Layout() {
             {item.label}
           </NavLink>
         ))}
+
+        {/* Stock & Materials Section */}
+        {stockNav.length > 0 && (
+          <>
+            <div className="pt-4 pb-2 px-3">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-gray-600">Stock & Materials</p>
+            </div>
+            {stockNav.map((item) => (
+              <NavLink
+                key={item.path}
+                to={item.path}
+                onClick={() => setSidebarOpen(false)}
+                className={({ isActive }) =>
+                  `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 ${
+                    isActive
+                      ? 'bg-primary-600/20 text-primary-400 border-l-2 border-primary-400'
+                      : 'text-gray-400 hover:bg-dark-hover hover:text-gray-200'
+                  }`
+                }
+              >
+                <item.icon className="w-5 h-5 flex-shrink-0" />
+                {item.label}
+              </NavLink>
+            ))}
+          </>
+        )}
 
         {/* Worker & Payroll Section */}
         {workerNav.length > 0 && (

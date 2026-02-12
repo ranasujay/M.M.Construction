@@ -70,6 +70,20 @@ export default function CustomerLedger() {
 
   return (
     <div className="space-y-6">
+      {/* Print header — visible only on print */}
+      <div className="print-header hidden">
+        <h1 style={{ fontSize: '14px', fontWeight: 'bold', margin: 0 }}>M.M. Construction</h1>
+        <p style={{ fontSize: '9px', margin: '1px 0', color: '#555' }}>Iron Fabrication & Installation</p>
+        <hr style={{ margin: '4px 0', borderColor: '#333' }} />
+        <div style={{ fontSize: '9px', marginTop: '2px' }}>
+          <strong>Customer Ledger:</strong> {customer.name} | 📱 {customer.phone}
+          {customer.address && <span> | {customer.address}</span>}
+        </div>
+        <div style={{ fontSize: '8px', marginTop: '2px', color: '#555' }}>
+          Printed on: {new Date().toLocaleDateString('en-IN')}
+        </div>
+      </div>
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3 min-w-0">
@@ -277,6 +291,11 @@ export default function CustomerLedger() {
           </div>
         </form>
       </Modal>
+
+      {/* Print footer */}
+      <div className="print-footer hidden" style={{ marginTop: '8px', fontSize: '8px', textAlign: 'center', color: '#888' }}>
+        Thank you for your business! — M.M. Construction
+      </div>
     </div>
   );
 }

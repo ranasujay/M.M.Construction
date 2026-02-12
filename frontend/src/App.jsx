@@ -24,6 +24,15 @@ import WorkerAttendance from './pages/WorkerAttendance';
 import WorkerAdvances from './pages/WorkerAdvances';
 import WorkerSalary from './pages/WorkerSalary';
 import ProductSales from './pages/ProductSales';
+import RawMaterials from './pages/RawMaterials';
+import PurchaseEntry from './pages/PurchaseEntry';
+import PurchaseHistory from './pages/PurchaseHistory';
+import StockDashboard from './pages/StockDashboard';
+import StockLogs from './pages/StockLogs';
+import Suppliers from './pages/Suppliers';
+import SupplierLedger from './pages/SupplierLedger';
+import PurchaseEdit from './pages/PurchaseEdit';
+import PurchaseExpenses from './pages/PurchaseExpenses';
 
 // Protected route wrapper
 const ProtectedRoute = ({ children }) => {
@@ -77,6 +86,43 @@ function App() {
         <Route
           path="users"
           element={<OwnerRoute><Users /></OwnerRoute>}
+        />
+        {/* Stock & Materials Module (Owner Only) */}
+        <Route
+          path="stock-dashboard"
+          element={<OwnerRoute><StockDashboard /></OwnerRoute>}
+        />
+        <Route
+          path="raw-materials"
+          element={<OwnerRoute><RawMaterials /></OwnerRoute>}
+        />
+        <Route
+          path="purchases"
+          element={<OwnerRoute><PurchaseHistory /></OwnerRoute>}
+        />
+        <Route
+          path="purchases/create"
+          element={<OwnerRoute><PurchaseEntry /></OwnerRoute>}
+        />
+        <Route
+          path="purchases/:id/edit"
+          element={<OwnerRoute><PurchaseEdit /></OwnerRoute>}
+        />
+        <Route
+          path="suppliers"
+          element={<OwnerRoute><Suppliers /></OwnerRoute>}
+        />
+        <Route
+          path="suppliers/:id/ledger"
+          element={<OwnerRoute><SupplierLedger /></OwnerRoute>}
+        />
+        <Route
+          path="stock-logs"
+          element={<OwnerRoute><StockLogs /></OwnerRoute>}
+        />
+        <Route
+          path="purchase-expenses"
+          element={<OwnerRoute><PurchaseExpenses /></OwnerRoute>}
         />
         {/* Worker & Payroll Module (Owner Only) */}
         <Route
