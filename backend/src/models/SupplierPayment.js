@@ -8,11 +8,6 @@ const supplierPaymentSchema = new mongoose.Schema(
       required: [true, 'Supplier is required'],
       index: true,
     },
-    purchaseBill: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'PurchaseBill',
-      default: null,
-    },
     amount: {
       type: Number,
       required: [true, 'Payment amount is required'],

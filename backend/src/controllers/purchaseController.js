@@ -5,6 +5,7 @@ const Counter = require('../models/Counter');
 const Supplier = require('../models/Supplier');
 const SupplierPayment = require('../models/SupplierPayment');
 const { recalcSupplierLedger } = require('./supplierController');
+const { recalcAvgRate } = require('./rawMaterialController');
 const { asyncHandler, AppError } = require('../middleware/errorHandler');
 const { logActivity } = require('../utils/activityLogger');
 
@@ -76,6 +77,9 @@ const createPurchase = asyncHandler(async (req, res) => {
       notes: `Purchase from ${supplierName} (${billNumber})`,
       performedBy: req.user._id,
     });
+
+    // Recalculate weighted average rate for this material
+    await recalcAvgRate(item.rawMaterial);
   }
 
   logActivity({
@@ -100,11 +104,38 @@ const createPurchase = asyncHandler(async (req, res) => {
         supplier: purchase.supplier,
         purchaseBill: purchase._id,
         amount: parseFloat(paidAmount),
+        allocations: [{ purchaseBill: purchase._id, amount: parseFloat(paidAmount) }],
+        unallocatedAmount: 0,
         mode: 'Cash',
         notes: `Payment with purchase ${billNumber}`,
         paidBy: req.user._id,
       });
     }
+
+    // Auto-apply supplier advance balance
+    const freshSupplier = await Supplier.findById(purchase.supplier);
+    if (freshSupplier && freshSupplier.advanceBalance > 0) {
+      const effectiveDue = purchase.grandTotal - (purchase.totalPaid || 0);
+      if (effectiveDue > 0) {
+        const applyAmount = Math.min(freshSupplier.advanceBalance, effectiveDue);
+        purchase.totalPaid = Math.round(((purchase.totalPaid || 0) + applyAmount) * 100) / 100;
+        purchase.dueAmount = Math.round(Math.max(0, purchase.grandTotal - purchase.totalPaid) * 100) / 100;
+        purchase.paymentStatus = purchase.dueAmount === 0 ? 'PAID' : 'PARTIAL';
+        await purchase.save();
+
+        await SupplierPayment.create({
+          supplier: purchase.supplier,
+          purchaseBill: purchase._id,
+          amount: applyAmount,
+          allocations: [{ purchaseBill: purchase._id, amount: applyAmount }],
+          unallocatedAmount: 0,
+          mode: 'Cash',
+          notes: `Auto-applied from advance balance`,
+          paidBy: req.user._id,
+        });
+      }
+    }
+
     await recalcSupplierLedger(purchase.supplier);
   }
 
@@ -173,6 +204,7 @@ const updatePurchase = asyncHandler(async (req, res) => {
   const oldSupplierId = purchase.supplier ? purchase.supplier.toString() : null;
 
   // Reverse old stock changes
+  const oldMaterialIds = purchase.items.map((i) => i.rawMaterial);
   for (const item of purchase.items) {
     const material = await RawMaterial.findById(item.rawMaterial);
     if (material) {
@@ -230,7 +262,16 @@ const updatePurchase = asyncHandler(async (req, res) => {
         notes: `Purchase from ${purchase.supplierName} (${purchase.billNumber}) [edited]`,
         performedBy: req.user._id,
       });
+
+      // Recalculate weighted average rate for this material
+      await recalcAvgRate(item.rawMaterial);
     }
+  }
+
+  // Also recalculate avg rate for any old materials that were removed from this purchase
+  for (const oldMatId of oldMaterialIds) {
+    const stillPresent = purchase.items.some((i) => i.rawMaterial.toString() === oldMatId.toString());
+    if (!stillPresent) await recalcAvgRate(oldMatId);
   }
 
   // Recalculate supplier ledgers (old and new)

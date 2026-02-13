@@ -44,22 +44,26 @@ const recalcCustomerLedger = async (customerId) => {
       $group: {
         _id: null,
         totalPaid: { $sum: '$amount' },
+        totalLess: { $sum: { $ifNull: ['$lessAmount', 0] } },
       },
     },
   ]);
 
   const totalBilled = (billResult[0]?.totalBilled || 0) + openingBalance;
   const totalPaid = payResult[0]?.totalPaid || 0;
+  const totalLess = payResult[0]?.totalLess || 0;
+  const effectiveTotal = totalPaid + totalLess;
 
-  // Due = billed - paid (if positive); Advance = paid - billed (if positive)
-  const currentDue = Math.max(0, Math.round((totalBilled - totalPaid) * 100) / 100);
-  const advance = Math.max(0, Math.round((totalPaid - totalBilled) * 100) / 100);
+  // Due = billed - (paid + less); Advance = (paid + less) - billed (if positive)
+  const currentDue = Math.max(0, Math.round((totalBilled - effectiveTotal) * 100) / 100);
+  const advance = Math.max(0, Math.round((effectiveTotal - totalBilled) * 100) / 100);
 
   await Customer.findByIdAndUpdate(customerId, {
     totalBilled,
     totalPaid,
     currentDue,
     advanceBalance: advance,
+    lessAmount: totalLess,
   });
 };
 
@@ -153,11 +157,10 @@ const createBill = asyncHandler(async (req, res) => {
   // If advance payment was given, record it as a Payment entry so it shows in payment history
   if (bill.advancePayment > 0) {
     await Payment.create({
-      bill: bill._id,
       customer: customer,
       amount: bill.advancePayment,
       mode: advancePaymentMode || 'Cash',
-      notes: 'Advance payment at billing',
+      notes: `Advance payment at billing (${billNumber})`,
       receivedBy: req.user._id,
     });
 
@@ -167,41 +170,6 @@ const createBill = asyncHandler(async (req, res) => {
       entityId: bill._id,
       description: `Advance ₹${bill.advancePayment} recorded for bill ${billNumber}`,
       metadata: { billId: bill._id, amount: bill.advancePayment, mode: advancePaymentMode || 'Cash', billNumber },
-      performedBy: req.user._id,
-    });
-  }
-
-  // Auto-apply customer's existing advance balance against this bill
-  const freshCustomer = await Customer.findById(customer);
-  if (freshCustomer && freshCustomer.advanceBalance > 0 && bill.dueAmount > 0) {
-    const applyAmount = Math.min(freshCustomer.advanceBalance, bill.dueAmount);
-    // Update bill totals
-    bill.totalPaid = Math.round((bill.totalPaid + applyAmount) * 100) / 100;
-    bill.dueAmount = Math.round((bill.grandTotal - bill.totalPaid) * 100) / 100;
-    if (bill.dueAmount <= 0) {
-      bill.dueAmount = 0;
-      bill.paymentStatus = 'PAID';
-    } else {
-      bill.paymentStatus = 'PARTIAL';
-    }
-    await bill.save();
-
-    // Record as payment entry
-    await Payment.create({
-      bill: bill._id,
-      customer: customer,
-      amount: applyAmount,
-      mode: 'Cash',
-      notes: 'Auto-applied from advance balance',
-      receivedBy: req.user._id,
-    });
-
-    logActivity({
-      action: 'PAYMENT_ADDED',
-      entity: 'payment',
-      entityId: bill._id,
-      description: `Advance ₹${applyAmount} auto-applied to bill ${billNumber}`,
-      metadata: { billId: bill._id, amount: applyAmount, billNumber },
       performedBy: req.user._id,
     });
   }
@@ -286,7 +254,15 @@ const getBill = asyncHandler(async (req, res) => {
 
   if (!bill) throw new AppError('Bill not found', 404);
 
-  res.json({ success: true, data: bill });
+  // Fetch payments linked to this bill (notes contain bill number)
+  const billPayments = await Payment.find({
+    customer: bill.customer._id || bill.customer,
+    notes: { $regex: bill.billNumber, $options: 'i' },
+  })
+    .populate('receivedBy', 'name')
+    .sort('-createdAt');
+
+  res.json({ success: true, data: bill, payments: billPayments });
 });
 
 /**
@@ -297,7 +273,16 @@ const updateBill = asyncHandler(async (req, res) => {
   const bill = await Bill.findById(req.params.id);
   if (!bill) throw new AppError('Bill not found', 404);
 
-  const { items, discount, discountType, deliveryDate, notes } = req.body;
+  const { customer: newCustomerId, items, discount, discountType, deliveryDate, notes, paymentReceived, paymentMode } = req.body;
+
+  const oldCustomerId = bill.customer;
+
+  // If customer is being changed, verify new customer exists
+  if (newCustomerId && newCustomerId.toString() !== oldCustomerId.toString()) {
+    const newCust = await Customer.findById(newCustomerId);
+    if (!newCust) throw new AppError('Customer not found', 404);
+    bill.customer = newCustomerId;
+  }
 
   if (items) {
     const lineItems = [];
@@ -325,7 +310,33 @@ const updateBill = asyncHandler(async (req, res) => {
   if (notes !== undefined) bill.notes = notes;
 
   await bill.save(); // triggers pre-validate recalculation
+
+  // If payment received during bill edit, create a Payment record
+  const payAmt = parseFloat(paymentReceived) || 0;
+  if (payAmt > 0) {
+    await Payment.create({
+      customer: bill.customer,
+      amount: payAmt,
+      mode: paymentMode || 'Cash',
+      notes: `Payment received on bill edit (${bill.billNumber})`,
+      receivedBy: req.user._id,
+    });
+
+    logActivity({
+      action: 'PAYMENT_ADDED',
+      entity: 'payment',
+      entityId: bill._id,
+      description: `Payment ₹${payAmt} recorded during edit of bill ${bill.billNumber}`,
+      metadata: { billId: bill._id, amount: payAmt, mode: paymentMode || 'Cash', billNumber: bill.billNumber },
+      performedBy: req.user._id,
+    });
+  }
+
   await recalcCustomerLedger(bill.customer);
+  // If customer changed, also recalculate old customer's ledger
+  if (newCustomerId && newCustomerId.toString() !== oldCustomerId.toString()) {
+    await recalcCustomerLedger(oldCustomerId);
+  }
 
   const populated = await Bill.findById(bill._id)
     .populate('customer', 'name phone')
@@ -649,29 +660,11 @@ const getBillProfit = asyncHandler(async (req, res) => {
   const bill = await Bill.findById(req.params.id);
   if (!bill) throw new AppError('Bill not found', 404);
 
-  const PurchaseBill = require('../models/PurchaseBill');
-
-  // Get average purchase rates for all materials
-  const avgRates = await PurchaseBill.aggregate([
-    { $unwind: '$items' },
-    {
-      $group: {
-        _id: '$items.rawMaterial',
-        totalQty: { $sum: '$items.quantity' },
-        totalCost: { $sum: '$items.totalCost' },
-      },
-    },
-  ]);
-  const materialRateMap = {};
-  avgRates.forEach((r) => {
-    materialRateMap[r._id.toString()] = r.totalQty > 0 ? r.totalCost / r.totalQty : 0;
-  });
-
   // Get products with consumption data
   const productIds = bill.items.map((i) => i.product).filter(Boolean);
   const products = await Product.find({ _id: { $in: productIds } })
     .select('materialConsumption')
-    .populate('materialConsumption.rawMaterial', 'name unit')
+    .populate('materialConsumption.rawMaterial', 'name unit avgRate')
     .lean();
 
   const productMap = {};
@@ -686,15 +679,14 @@ const getBillProfit = asyncHandler(async (req, res) => {
     const materials = [];
 
     consumption.forEach((mc) => {
-      const matId = mc.rawMaterial?._id?.toString() || mc.rawMaterial?.toString();
-      const purchaseRate = materialRateMap[matId] || 0;
-      const matCost = mc.quantityPerUnit * purchaseRate;
+      const matRate = mc.rawMaterial?.avgRate || 0;
+      const matCost = mc.quantityPerUnit * matRate;
       costPerUnit += matCost;
       materials.push({
         name: mc.rawMaterial?.name || 'Unknown',
         unit: mc.rawMaterial?.unit || '',
         qtyPerUnit: mc.quantityPerUnit,
-        rate: Math.round(purchaseRate * 100) / 100,
+        rate: Math.round(matRate * 100) / 100,
         cost: Math.round(matCost * 100) / 100,
       });
     });

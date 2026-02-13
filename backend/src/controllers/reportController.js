@@ -75,7 +75,6 @@ const paymentReport = asyncHandler(async (req, res) => {
   }
 
   const payments = await Payment.find(filter)
-    .populate('bill', 'billNumber')
     .populate('customer', 'name phone')
     .populate('receivedBy', 'name')
     .sort('-createdAt');
@@ -112,8 +111,7 @@ const customerLedgerReport = asyncHandler(async (req, res) => {
     .sort('-createdAt');
 
   const payments = await Payment.find({ customer: req.params.customerId })
-    .populate('bill', 'billNumber')
-    .select('amount mode referenceNumber createdAt bill')
+    .select('amount mode referenceNumber createdAt')
     .sort('-createdAt');
 
   res.json({
@@ -126,6 +124,7 @@ const customerLedgerReport = asyncHandler(async (req, res) => {
         totalBilled: customer.totalBilled,
         totalPaid: customer.totalPaid,
         currentDue: customer.currentDue,
+        advanceBalance: customer.advanceBalance || 0,
       },
       bills,
       payments,

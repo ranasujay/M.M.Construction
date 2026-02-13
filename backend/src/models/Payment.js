@@ -2,12 +2,6 @@ const mongoose = require('mongoose');
 
 const paymentSchema = new mongoose.Schema(
   {
-    bill: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'Bill',
-      default: null,
-      index: true,
-    },
     customer: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Customer',
@@ -32,6 +26,11 @@ const paymentSchema = new mongoose.Schema(
       type: String,
       trim: true,
       maxlength: 500,
+    },
+    lessAmount: {
+      type: Number,
+      default: 0,
+      min: 0,
     },
     receivedBy: {
       type: mongoose.Schema.Types.ObjectId,

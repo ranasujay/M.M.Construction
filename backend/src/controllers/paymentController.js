@@ -1,88 +1,133 @@
 const mongoose = require('mongoose');
 const Payment = require('../models/Payment');
-const Bill = require('../models/Bill');
 const Customer = require('../models/Customer');
 const { asyncHandler, AppError } = require('../middleware/errorHandler');
 const { logActivity } = require('../utils/activityLogger');
 const { recalcCustomerLedger } = require('./billController');
 
-/**
- * @desc    Add payment (by customer — auto-assigns to oldest unpaid bill, or latest bill for advance)
- * @route   POST /api/payments
- */
+/* ───────────────────────────────────────────────────────────────────
+ * POST /api/payments — Add Payment (simple)
+ * Body: { customer, amount, mode, referenceNumber, notes }
+ * ─────────────────────────────────────────────────────────────────── */
 const addPayment = asyncHandler(async (req, res) => {
-  const { customer: customerId, amount, mode, referenceNumber, notes } = req.body;
+  const { customer: customerId, amount, mode, referenceNumber, notes, lessAmount } = req.body;
 
-  // Verify customer exists
+  const totalAmount = Math.round(parseFloat(amount || 0) * 100) / 100;
+  const totalLess = Math.round(parseFloat(lessAmount || 0) * 100) / 100;
+
+  if (totalAmount <= 0 && totalLess <= 0) throw new AppError('Payment or less amount must be > 0', 400);
+
   const customer = await Customer.findById(customerId);
   if (!customer) throw new AppError('Customer not found', 404);
 
-  // Find oldest unpaid bill for this customer
-  let bill = await Bill.findOne({
-    customer: customerId,
-    paymentStatus: { $in: ['DUE', 'PARTIAL'] },
-  }).sort({ createdAt: 1 });
-
-  // If no unpaid bill, use latest bill (advance/extra payment)
-  if (!bill) {
-    bill = await Bill.findOne({ customer: customerId }).sort({ createdAt: -1 });
-  }
-
-  // Create payment record (bill can be null for pure advance)
   const payment = await Payment.create({
-    bill: bill ? bill._id : null,
     customer: customerId,
-    amount,
+    amount: totalAmount,
     mode,
     referenceNumber,
-    notes,
+    notes: notes || '',
+    lessAmount: totalLess,
     receivedBy: req.user._id,
   });
-
-  // Update bill payment totals (only if a bill exists)
-  if (bill) {
-    bill.totalPaid = Math.round((bill.totalPaid + amount) * 100) / 100;
-    bill.dueAmount = Math.round((bill.grandTotal - bill.totalPaid) * 100) / 100;
-    if (bill.dueAmount <= 0) {
-      bill.dueAmount = 0;
-      bill.paymentStatus = 'PAID';
-    } else {
-      bill.paymentStatus = 'PARTIAL';
-    }
-    await bill.save();
-  }
 
   // Recalculate customer ledger
   await recalcCustomerLedger(customerId);
 
-  const populatedPayment = await Payment.findById(payment._id)
-    .populate('bill', 'billNumber')
+  const populated = await Payment.findById(payment._id)
     .populate('customer', 'name phone')
     .populate('receivedBy', 'name');
 
-  const billLabel = bill ? bill.billNumber : 'advance (no bill)';
+  const descParts = [];
+  if (totalAmount > 0) descParts.push(`₹${totalAmount}`);
+  if (totalLess > 0) descParts.push(`Less ₹${totalLess}`);
+
   logActivity({
     action: 'PAYMENT_ADDED',
     entity: 'payment',
     entityId: payment._id,
-    description: `Payment ₹${amount} added as ${billLabel} (${customer.name}) via ${mode}`,
-    metadata: { customerId, billId: bill ? bill._id : null, amount, mode, billNumber: billLabel },
+    description: `Payment ${descParts.join(' + ')} from "${customer.name}" via ${mode}`,
+    metadata: { customerId, amount: totalAmount, lessAmount: totalLess, mode },
     performedBy: req.user._id,
   });
 
-  res.status(201).json({ success: true, data: populatedPayment });
+  res.status(201).json({ success: true, data: populated });
 });
 
-/**
- * @desc    Get payments for a bill
- * @route   GET /api/payments/bill/:billId
- */
-const getBillPayments = asyncHandler(async (req, res) => {
-  const payments = await Payment.find({ bill: req.params.billId })
-    .populate('receivedBy', 'name')
-    .sort('-createdAt');
+/* ───────────────────────────────────────────────────────────────────
+ * PUT /api/payments/:id — Update Payment
+ * ─────────────────────────────────────────────────────────────────── */
+const updatePayment = asyncHandler(async (req, res) => {
+  const { customer: newCustomerId, amount, mode, referenceNumber, notes, lessAmount } = req.body;
 
-  res.json({ success: true, count: payments.length, data: payments });
+  const payment = await Payment.findById(req.params.id);
+  if (!payment) throw new AppError('Payment not found', 404);
+
+  const oldCustomerId = payment.customer;
+
+  // If customer is being changed, verify new customer exists
+  if (newCustomerId && newCustomerId.toString() !== oldCustomerId.toString()) {
+    const newCust = await Customer.findById(newCustomerId);
+    if (!newCust) throw new AppError('Customer not found', 404);
+    payment.customer = newCustomerId;
+  }
+
+  if (amount !== undefined) payment.amount = Math.round(parseFloat(amount) * 100) / 100;
+  if (mode) payment.mode = mode;
+  if (referenceNumber !== undefined) payment.referenceNumber = referenceNumber;
+  if (notes !== undefined) payment.notes = notes;
+  if (lessAmount !== undefined) payment.lessAmount = Math.round(parseFloat(lessAmount || 0) * 100) / 100;
+
+  await payment.save();
+
+  // Recalculate ledger for old customer
+  await recalcCustomerLedger(oldCustomerId);
+  // If customer changed, also recalculate new customer's ledger
+  if (newCustomerId && newCustomerId.toString() !== oldCustomerId.toString()) {
+    await recalcCustomerLedger(newCustomerId);
+  }
+
+  const populated = await Payment.findById(payment._id)
+    .populate('customer', 'name phone')
+    .populate('receivedBy', 'name');
+
+  logActivity({
+    action: 'PAYMENT_UPDATED',
+    entity: 'payment',
+    entityId: payment._id,
+    description: `Payment updated — ₹${payment.amount}`,
+    metadata: { customerId: payment.customer, amount: payment.amount },
+    performedBy: req.user._id,
+  });
+
+  res.json({ success: true, data: populated });
+});
+
+/* ───────────────────────────────────────────────────────────────────
+ * DELETE /api/payments/:id — Delete Payment
+ * ─────────────────────────────────────────────────────────────────── */
+const deletePayment = asyncHandler(async (req, res) => {
+  const payment = await Payment.findById(req.params.id);
+  if (!payment) throw new AppError('Payment not found', 404);
+
+  const customerId = payment.customer;
+  const amount = payment.amount;
+  const customer = await Customer.findById(customerId);
+
+  await payment.deleteOne();
+
+  // Recalculate customer ledger
+  await recalcCustomerLedger(customerId);
+
+  logActivity({
+    action: 'PAYMENT_DELETED',
+    entity: 'payment',
+    entityId: req.params.id,
+    description: `Payment ₹${amount} deleted for "${customer?.name}"`,
+    metadata: { customerId, amount },
+    performedBy: req.user._id,
+  });
+
+  res.json({ success: true, message: 'Payment deleted' });
 });
 
 /**
@@ -91,7 +136,6 @@ const getBillPayments = asyncHandler(async (req, res) => {
  */
 const getCustomerPayments = asyncHandler(async (req, res) => {
   const payments = await Payment.find({ customer: req.params.customerId })
-    .populate('bill', 'billNumber grandTotal')
     .populate('receivedBy', 'name')
     .sort('-createdAt');
 
@@ -115,7 +159,6 @@ const getPayments = asyncHandler(async (req, res) => {
 
   const total = await Payment.countDocuments(filter);
   const payments = await Payment.find(filter)
-    .populate('bill', 'billNumber')
     .populate('customer', 'name phone')
     .populate('receivedBy', 'name')
     .sort('-createdAt')
@@ -141,7 +184,8 @@ const getPayments = asyncHandler(async (req, res) => {
 
 module.exports = {
   addPayment,
-  getBillPayments,
+  updatePayment,
+  deletePayment,
   getCustomerPayments,
   getPayments,
 };

@@ -8,7 +8,7 @@ import { HiOutlinePlus, HiOutlinePencil, HiOutlineAdjustments } from 'react-icon
 
 const UNITS = ['kg', 'piece', 'meter', 'sqft', 'rft', 'foot'];
 
-const defaultForm = { name: '', unit: 'kg', currentStock: '0', minimumStockAlert: '0', isActive: true };
+const defaultForm = { name: '', unit: 'kg', currentStock: '0', openingRate: '0', minimumStockAlert: '0', isActive: true };
 
 export default function RawMaterials() {
   const [materials, setMaterials] = useState([]);
@@ -51,6 +51,7 @@ export default function RawMaterials() {
       name: m.name,
       unit: m.unit,
       currentStock: m.currentStock.toString(),
+      openingRate: (m.openingRate || 0).toString(),
       minimumStockAlert: m.minimumStockAlert.toString(),
       isActive: m.isActive,
       stockUpdateNotes: '',
@@ -92,6 +93,7 @@ export default function RawMaterials() {
       const payload = {
         ...form,
         currentStock: parseFloat(form.currentStock) || 0,
+        openingRate: parseFloat(form.openingRate) || 0,
         minimumStockAlert: parseFloat(form.minimumStockAlert) || 0,
         stockUpdateNotes: form.stockUpdateNotes || '',
       };
@@ -194,6 +196,12 @@ export default function RawMaterials() {
                       {m.currentStock} {m.unit}
                     </p>
                   </div>
+                  {m.avgRate > 0 && (
+                    <div className="text-right">
+                      <span className="text-xs text-gray-500">Avg Rate</span>
+                      <p className="text-sm font-semibold text-blue-400">₹{m.avgRate.toFixed(2)}/{m.unit}</p>
+                    </div>
+                  )}
                   {m.minimumStockAlert > 0 && m.currentStock <= m.minimumStockAlert && (
                     <span className={`text-xs px-2 py-0.5 rounded-full ${m.currentStock < 0 ? 'bg-red-500/20 text-red-400' : 'bg-amber-500/20 text-amber-400'}`}>
                       {m.currentStock < 0 ? '⚠ Negative' : '⚠ Low Stock'}
@@ -211,6 +219,7 @@ export default function RawMaterials() {
                   <th>Material</th>
                   <th>Unit</th>
                   <th>Current Stock</th>
+                  <th>Avg Rate</th>
                   <th>Min. Alert</th>
                   <th>Status</th>
                   <th>Actions</th>
@@ -226,6 +235,7 @@ export default function RawMaterials() {
                         {m.currentStock}
                       </span>
                     </td>
+                    <td className="text-blue-400 font-medium">{m.avgRate > 0 ? `₹${m.avgRate.toFixed(2)}` : '-'}</td>
                     <td className="text-gray-500">{m.minimumStockAlert || '-'}</td>
                     <td>
                       {m.currentStock < 0 ? (
@@ -275,22 +285,34 @@ export default function RawMaterials() {
             </div>
           </div>
           {!editingId && (
-            <div>
-              <label className="label">Opening Stock</label>
-              <input type="number" step="0.01" className="input" value={form.currentStock} onChange={(e) => setForm({ ...form, currentStock: e.target.value })} placeholder="0" />
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="label">Opening Stock</label>
+                <input type="number" step="0.01" className="input" value={form.currentStock} onChange={(e) => setForm({ ...form, currentStock: e.target.value })} placeholder="0" />
+              </div>
+              <div>
+                <label className="label">Opening Rate (₹)</label>
+                <input type="number" step="0.01" min="0" className="input" value={form.openingRate} onChange={(e) => setForm({ ...form, openingRate: e.target.value })} placeholder="0" />
+              </div>
             </div>
           )}
           {editingId && (
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="label">Current Stock</label>
-                <input type="number" step="0.01" className="input" value={form.currentStock} onChange={(e) => setForm({ ...form, currentStock: e.target.value })} />
+            <>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="label">Current Stock</label>
+                  <input type="number" step="0.01" className="input" value={form.currentStock} onChange={(e) => setForm({ ...form, currentStock: e.target.value })} />
+                </div>
+                <div>
+                  <label className="label">Opening Rate (₹)</label>
+                  <input type="number" step="0.01" min="0" className="input" value={form.openingRate} onChange={(e) => setForm({ ...form, openingRate: e.target.value })} placeholder="0" />
+                </div>
               </div>
               <div>
-                <label className="label">Reason for change</label>
+                <label className="label">Reason for stock change</label>
                 <input className="input" value={form.stockUpdateNotes || ''} onChange={(e) => setForm({ ...form, stockUpdateNotes: e.target.value })} placeholder="e.g. Physical count" />
               </div>
-            </div>
+            </>
           )}
           {editingId && (
             <div className="flex items-center gap-2">

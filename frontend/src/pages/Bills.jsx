@@ -3,8 +3,8 @@ import { Link } from 'react-router-dom';
 import api from '../services/api';
 import Loader from '../components/Loader';
 import Pagination from '../components/Pagination';
-import { formatCurrency, formatDate, getStatusColor } from '../utils/helpers';
-import { HiOutlinePlus, HiOutlineSearch, HiOutlineFilter } from 'react-icons/hi';
+import { formatCurrency, formatDate } from '../utils/helpers';
+import { HiOutlinePlus, HiOutlineSearch } from 'react-icons/hi';
 
 export default function Bills() {
   const [bills, setBills] = useState([]);
@@ -12,7 +12,6 @@ export default function Bills() {
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState('');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
 
@@ -21,7 +20,6 @@ export default function Bills() {
       setLoading(true);
       const params = { page, limit: 15 };
       if (search) params.search = search;
-      if (statusFilter) params.status = statusFilter;
       if (startDate) params.startDate = startDate;
       if (endDate) params.endDate = endDate;
       const { data } = await api.get('/bills', { params });
@@ -34,7 +32,7 @@ export default function Bills() {
     }
   };
 
-  useEffect(() => { fetchBills(); }, [page, statusFilter, startDate, endDate]);
+  useEffect(() => { fetchBills(); }, [page, startDate, endDate]);
 
   const handleSearch = (e) => {
     e.preventDefault();
@@ -61,18 +59,9 @@ export default function Bills() {
             <label className="label">Search Bill #</label>
             <div className="relative">
               <HiOutlineSearch className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500" />
-              <input className="input pl-10" placeholder="MM-2026-0001" value={search} onChange={(e) => setSearch(e.target.value)} />
+              <input className="input pl-10" placeholder="MMC-2026-0001" value={search} onChange={(e) => setSearch(e.target.value)} />
             </div>
           </form>
-          <div className="min-w-[150px]">
-            <label className="label">Status</label>
-            <select className="select" value={statusFilter} onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}>
-              <option value="">All</option>
-              <option value="PAID">Paid</option>
-              <option value="PARTIAL">Partial</option>
-              <option value="DUE">Due</option>
-            </select>
-          </div>
           <div className="min-w-[150px]">
             <label className="label">From</label>
             <input type="date" className="input" value={startDate} onChange={(e) => { setStartDate(e.target.value); setPage(1); }} />
@@ -92,16 +81,13 @@ export default function Bills() {
               <Link key={bill._id} to={`/bills/${bill._id}`} className="card !p-3 block">
                 <div className="flex items-center justify-between">
                   <span className="text-primary-400 font-medium text-sm">{bill.billNumber}</span>
-                  <span className={getStatusColor(bill.paymentStatus) + ' text-[10px]'}>{bill.paymentStatus}</span>
-                </div>
-                <div className="flex items-center justify-between mt-1">
-                  <span className="text-gray-200 text-sm font-medium">{bill.customer?.name}</span>
-                  <span className="text-gray-500 text-xs">{formatDate(bill.createdAt)}</span>
+                  <span className="text-gray-100 font-semibold text-sm">{formatCurrency(bill.grandTotal)}</span>
                 </div>
                 <div className="flex items-center justify-between mt-1 text-xs">
-                  <span className="text-gray-400">Total: <span className="font-semibold text-gray-200">{formatCurrency(bill.grandTotal)}</span></span>
-                  {bill.dueAmount > 0 && <span className="text-red-400 font-semibold">Due: {formatCurrency(bill.dueAmount)}</span>}
+                  <span className="text-gray-200 font-medium">{bill.customer?.name}</span>
+                  <span className="text-gray-500">{formatDate(bill.createdAt)}</span>
                 </div>
+                <div className="text-xs text-gray-500 mt-0.5">{bill.createdBy?.name}</div>
               </Link>
             ))}
           </div>
@@ -114,9 +100,6 @@ export default function Bills() {
                   <th>Customer</th>
                   <th>Date</th>
                   <th>Grand Total</th>
-                  <th>Paid</th>
-                  <th>Due</th>
-                  <th>Status</th>
                   <th>Created By</th>
                 </tr>
               </thead>
@@ -131,11 +114,6 @@ export default function Bills() {
                     <td className="font-medium text-gray-200">{bill.customer?.name}</td>
                     <td>{formatDate(bill.createdAt)}</td>
                     <td className="font-semibold">{formatCurrency(bill.grandTotal)}</td>
-                    <td className="text-emerald-400">{formatCurrency(bill.totalPaid)}</td>
-                    <td className={bill.dueAmount > 0 ? 'text-red-400 font-semibold' : ''}>
-                      {formatCurrency(bill.dueAmount)}
-                    </td>
-                    <td><span className={getStatusColor(bill.paymentStatus)}>{bill.paymentStatus}</span></td>
                     <td className="text-gray-500">{bill.createdBy?.name}</td>
                   </tr>
                 ))}

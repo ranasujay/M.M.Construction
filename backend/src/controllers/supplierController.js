@@ -129,11 +129,12 @@ const updateSupplier = asyncHandler(async (req, res) => {
 });
 
 /**
- * @desc    Record payment to supplier
+ * @desc    Record payment to supplier (simple)
  * @route   POST /api/suppliers/:id/pay
+ * Body: { amount, mode, referenceNumber, notes }
  */
 const paySupplier = asyncHandler(async (req, res) => {
-  const { amount, mode, referenceNumber, notes, purchaseBill } = req.body;
+  const { amount, mode, referenceNumber, notes } = req.body;
 
   if (!amount || parseFloat(amount) <= 0) {
     throw new AppError('Payment amount must be greater than 0', 400);
@@ -142,10 +143,11 @@ const paySupplier = asyncHandler(async (req, res) => {
   const supplier = await Supplier.findById(req.params.id);
   if (!supplier) throw new AppError('Supplier not found', 404);
 
+  const totalAmount = Math.round(parseFloat(amount) * 100) / 100;
+
   const payment = await SupplierPayment.create({
     supplier: supplier._id,
-    purchaseBill: purchaseBill || null,
-    amount: parseFloat(amount),
+    amount: totalAmount,
     mode: mode || 'Cash',
     referenceNumber: referenceNumber || '',
     notes: notes || '',
@@ -158,8 +160,8 @@ const paySupplier = asyncHandler(async (req, res) => {
     action: 'SUPPLIER_PAYMENT',
     entity: 'supplierPayment',
     entityId: payment._id,
-    description: `₹${payment.amount} paid to supplier "${supplier.name}" via ${payment.mode}`,
-    metadata: { supplierId: supplier._id, amount: payment.amount, mode: payment.mode },
+    description: `₹${totalAmount} paid to supplier "${supplier.name}" via ${payment.mode}`,
+    metadata: { supplierId: supplier._id, amount: totalAmount, mode: payment.mode },
     performedBy: req.user._id,
   });
 
@@ -178,7 +180,6 @@ const getSupplierPayments = asyncHandler(async (req, res) => {
   const total = await SupplierPayment.countDocuments(filter);
   const payments = await SupplierPayment.find(filter)
     .populate('paidBy', 'name')
-    .populate('purchaseBill', 'billNumber')
     .sort('-createdAt')
     .skip((page - 1) * limit)
     .limit(parseInt(limit));
@@ -255,7 +256,7 @@ const updateSupplierPayment = asyncHandler(async (req, res) => {
   const { amount, mode, referenceNumber, notes } = req.body;
   const oldAmount = payment.amount;
 
-  if (amount !== undefined) payment.amount = parseFloat(amount);
+  if (amount !== undefined) payment.amount = Math.round(parseFloat(amount) * 100) / 100;
   if (mode !== undefined) payment.mode = mode;
   if (referenceNumber !== undefined) payment.referenceNumber = referenceNumber;
   if (notes !== undefined) payment.notes = notes;
@@ -287,6 +288,7 @@ const deleteSupplierPayment = asyncHandler(async (req, res) => {
 
   const amount = payment.amount;
   const supplier = await Supplier.findById(req.params.id);
+
   await payment.deleteOne();
   await recalcSupplierLedger(req.params.id);
 

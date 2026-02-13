@@ -46,6 +46,12 @@ const customerSchema = new mongoose.Schema(
       default: 0,
       min: 0,
     },
+    // Total "less" / write-off amount given to this customer
+    lessAmount: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
     // Promise tracking
     nextPromiseDate: {
       type: Date,

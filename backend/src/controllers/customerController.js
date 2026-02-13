@@ -92,7 +92,6 @@ const getCustomerLedger = asyncHandler(async (req, res) => {
     .sort('-createdAt');
 
   const payments = await Payment.find({ customer: req.params.id })
-    .populate('bill', 'billNumber')
     .populate('receivedBy', 'name')
     .sort('-createdAt');
 
@@ -108,6 +107,7 @@ const getCustomerLedger = asyncHandler(async (req, res) => {
         currentDue: customer.currentDue,
         advanceBalance: customer.advanceBalance || 0,
         openingBalance: customer.openingBalance || 0,
+        lessAmount: customer.lessAmount || 0,
         totalBills: bills.length,
         totalPayments: payments.length,
       },

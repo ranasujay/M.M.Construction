@@ -2,7 +2,8 @@ const express = require('express');
 const router = express.Router();
 const {
   addPayment,
-  getBillPayments,
+  updatePayment,
+  deletePayment,
   getCustomerPayments,
   getPayments,
 } = require('../controllers/paymentController');
@@ -12,7 +13,7 @@ const { paymentRules, validate } = require('../middleware/validators');
 router.use(protect);
 
 router.route('/').get(getPayments).post(paymentRules, validate, addPayment);
-router.get('/bill/:billId', getBillPayments);
 router.get('/customer/:customerId', getCustomerPayments);
+router.route('/:id').put(updatePayment).delete(deletePayment);
 
 module.exports = router;

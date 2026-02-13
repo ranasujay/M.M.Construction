@@ -91,6 +91,23 @@ const purchaseBillSchema = new mongoose.Schema(
       default: 0,
       min: 0,
     },
+    // ─── Payment Tracking (mirrors Bill model) ──────────────
+    totalPaid: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    dueAmount: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    paymentStatus: {
+      type: String,
+      enum: ['PAID', 'PARTIAL', 'DUE'],
+      default: 'DUE',
+    },
+    // ─────────────────────────────────────────────────────────
     notes: {
       type: String,
       trim: true,
@@ -116,6 +133,22 @@ purchaseBillSchema.pre('validate', function (next) {
   const extras = (this.loadingCost || 0) + (this.carryingCost || 0);
   const disc = this.discount || 0;
   this.grandTotal = Math.round((itemsTotal + extras - disc) * 100) / 100;
+
+  // Calculate payment status
+  if (this.isNew) {
+    this.totalPaid = this.paidAmount || 0;
+  }
+  this.dueAmount = Math.round((this.grandTotal - this.totalPaid) * 100) / 100;
+  if (this.dueAmount < 0) this.dueAmount = 0;
+
+  if (this.dueAmount === 0 && this.grandTotal > 0) {
+    this.paymentStatus = 'PAID';
+  } else if (this.totalPaid > 0) {
+    this.paymentStatus = 'PARTIAL';
+  } else {
+    this.paymentStatus = 'DUE';
+  }
+
   next();
 });
 

@@ -1,30 +1,81 @@
 const RawMaterial = require('../models/RawMaterial');
 const StockLog = require('../models/StockLog');
+const PurchaseBill = require('../models/PurchaseBill');
+const mongoose = require('mongoose');
 const { asyncHandler, AppError } = require('../middleware/errorHandler');
 const { logActivity } = require('../utils/activityLogger');
+
+/**
+ * Recalculate weighted average rate for a raw material
+ * Sources: opening stock (openingRate) + all purchase bill items
+ * Formula: (openingQty * openingRate + Σ(purchaseQty * purchaseRate)) / (openingQty + Σ purchaseQty)
+ */
+const recalcAvgRate = async (materialId) => {
+  const material = await RawMaterial.findById(materialId);
+  if (!material) return;
+
+  // Get opening stock info from the first MANUAL_ADJUSTMENT log that says "Opening stock"
+  const openingLog = await StockLog.findOne({
+    rawMaterial: materialId,
+    changeType: 'MANUAL_ADJUSTMENT',
+    notes: 'Opening stock',
+  }).sort('createdAt');
+
+  const openingQty = openingLog ? openingLog.quantityChanged : 0;
+  const openingRate = material.openingRate || 0;
+
+  // Sum all purchase quantities and costs for this material
+  const purchaseAgg = await PurchaseBill.aggregate([
+    { $unwind: '$items' },
+    { $match: { 'items.rawMaterial': new mongoose.Types.ObjectId(materialId) } },
+    {
+      $group: {
+        _id: null,
+        totalQty: { $sum: '$items.quantity' },
+        totalCost: { $sum: '$items.totalCost' },
+      },
+    },
+  ]);
+
+  const purchaseQty = purchaseAgg[0]?.totalQty || 0;
+  const purchaseCost = purchaseAgg[0]?.totalCost || 0;
+
+  const totalQty = openingQty + purchaseQty;
+  const totalCost = (openingQty * openingRate) + purchaseCost;
+
+  const newAvgRate = totalQty > 0 ? Math.round((totalCost / totalQty) * 100) / 100 : openingRate;
+
+  await RawMaterial.findByIdAndUpdate(materialId, { avgRate: newAvgRate });
+  return newAvgRate;
+};
 
 /**
  * @desc    Create raw material
  * @route   POST /api/raw-materials
  */
 const createRawMaterial = asyncHandler(async (req, res) => {
-  const { name, unit, currentStock, minimumStockAlert } = req.body;
+  const { name, unit, currentStock, minimumStockAlert, openingRate } = req.body;
+
+  const oRate = parseFloat(openingRate) || 0;
+  const oStock = parseFloat(currentStock) || 0;
 
   const material = await RawMaterial.create({
     name,
     unit,
-    currentStock: currentStock || 0,
+    currentStock: oStock,
     minimumStockAlert: minimumStockAlert || 0,
+    openingRate: oRate,
+    avgRate: oRate, // initial avg rate = opening rate
     createdBy: req.user._id,
   });
 
   // If opening stock provided, create stock log
-  if (currentStock && currentStock > 0) {
+  if (oStock > 0) {
     await StockLog.create({
       rawMaterial: material._id,
       changeType: 'MANUAL_ADJUSTMENT',
-      quantityChanged: currentStock,
-      balanceAfter: currentStock,
+      quantityChanged: oStock,
+      balanceAfter: oStock,
       notes: 'Opening stock',
       performedBy: req.user._id,
     });
@@ -83,6 +134,11 @@ const updateRawMaterial = asyncHandler(async (req, res) => {
     }
   });
 
+  // Update opening rate if provided
+  if (req.body.openingRate !== undefined) {
+    material.openingRate = parseFloat(req.body.openingRate) || 0;
+  }
+
   // Allow directly setting currentStock (creates adjustment log)
   if (req.body.currentStock !== undefined) {
     const newStock = parseFloat(req.body.currentStock);
@@ -113,7 +169,11 @@ const updateRawMaterial = asyncHandler(async (req, res) => {
     performedBy: req.user._id,
   });
 
-  res.json({ success: true, data: material });
+  // Recalculate weighted average rate
+  await recalcAvgRate(material._id);
+  const updated = await RawMaterial.findById(material._id);
+
+  res.json({ success: true, data: updated });
 });
 
 /**
@@ -266,4 +326,5 @@ module.exports = {
   updateRawMaterial,
   adjustStock,
   getStockDashboard,
+  recalcAvgRate,
 };

@@ -454,7 +454,7 @@ export default function CreateBill() {
               </div>
             </div>
             <div>
-              <label className="text-[10px] text-gray-500 uppercase">Payment ₹</label>
+              <label className="text-[10px] text-gray-500 uppercase">Receive Payment ₹</label>
               <input type="number" step="0.01" className="input !py-2 text-sm" value={form.advancePayment} onChange={(e) => setForm({ ...form, advancePayment: e.target.value })} />
             </div>
             {(parseFloat(form.advancePayment) || 0) > 0 && (

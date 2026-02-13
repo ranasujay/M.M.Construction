@@ -1,6 +1,7 @@
 const Product = require('../models/Product');
 const Category = require('../models/Category');
 const Bill = require('../models/Bill');
+const Payment = require('../models/Payment');
 const { asyncHandler, AppError } = require('../middleware/errorHandler');
 const { logActivity } = require('../utils/activityLogger');
 
@@ -251,24 +252,12 @@ const getProductSalesReport = asyncHandler(async (req, res) => {
 
   const salesData = await Bill.aggregate(pipeline);
 
-  // Calculate material cost for each product
-  const PurchaseBill = require('../models/PurchaseBill');
-
-  // Get average purchase rates for all materials
-  const avgRates = await PurchaseBill.aggregate([
-    { $unwind: '$items' },
-    {
-      $group: {
-        _id: '$items.rawMaterial',
-        avgRate: { $avg: '$items.ratePerUnit' },
-        totalQty: { $sum: '$items.quantity' },
-        totalCost: { $sum: '$items.totalCost' },
-      },
-    },
-  ]);
+  // Get all raw materials with their stored average rates
+  const RawMaterial = require('../models/RawMaterial');
+  const allMaterials = await RawMaterial.find({}).select('avgRate').lean();
   const materialRateMap = {};
-  avgRates.forEach((r) => {
-    materialRateMap[r._id.toString()] = r.totalQty > 0 ? r.totalCost / r.totalQty : r.avgRate;
+  allMaterials.forEach((m) => {
+    materialRateMap[m._id.toString()] = m.avgRate || 0;
   });
 
   // Get products with materialConsumption
@@ -285,8 +274,8 @@ const getProductSalesReport = asyncHandler(async (req, res) => {
       let costPerUnit = 0;
       p.materialConsumption.forEach((mc) => {
         const matId = mc.rawMaterial.toString();
-        const purchaseRate = materialRateMap[matId] || 0;
-        costPerUnit += mc.quantityPerUnit * purchaseRate;
+        const matRate = materialRateMap[matId] || 0;
+        costPerUnit += mc.quantityPerUnit * matRate;
       });
       productConsumptionMap[p._id.toString()] = costPerUnit;
     }
@@ -324,6 +313,19 @@ const getProductSalesReport = asyncHandler(async (req, res) => {
     },
     { totalRevenue: 0, totalQuantity: 0, totalBills: 0, totalCost: 0, totalProfit: 0, totalFittingRevenue: 0 }
   );
+
+  // Calculate total customer less (write-offs) for the period
+  const lessFilter = {};
+  if (startDate || endDate) {
+    lessFilter.createdAt = {};
+    if (startDate) lessFilter.createdAt.$gte = new Date(startDate);
+    if (endDate) lessFilter.createdAt.$lte = new Date(endDate + 'T23:59:59.999Z');
+  }
+  const lessAgg = await Payment.aggregate([
+    { $match: lessFilter },
+    { $group: { _id: null, totalLess: { $sum: { $ifNull: ['$lessAmount', 0] } } } },
+  ]);
+  totals.totalCustomerLess = lessAgg[0]?.totalLess || 0;
 
   res.json({
     success: true,

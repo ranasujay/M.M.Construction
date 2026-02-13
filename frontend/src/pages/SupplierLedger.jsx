@@ -4,7 +4,7 @@ import { getSupplierLedger, paySupplier, updateSupplierPayment, deleteSupplierPa
 import Modal from '../components/Modal';
 import ConfirmDialog from '../components/ConfirmDialog';
 import Loader from '../components/Loader';
-import { formatCurrency, formatDate, formatDateTime } from '../utils/helpers';
+import { formatCurrency, formatDateTime } from '../utils/helpers';
 import toast from 'react-hot-toast';
 import { HiOutlineArrowLeft, HiOutlineCreditCard, HiOutlinePencil, HiOutlineTrash, HiOutlineExternalLink } from 'react-icons/hi';
 
@@ -41,9 +41,15 @@ export default function SupplierLedger() {
 
   useEffect(() => { fetchLedger(); }, [id]);
 
+  const openPayModal = () => {
+    setPayOpen(true);
+    setPayForm({ amount: '', mode: 'Cash', referenceNumber: '', notes: '' });
+  };
+
   const handlePayConfirm = async () => {
     const amt = parseFloat(payForm.amount);
     if (!amt || amt <= 0) { toast.error('Enter valid amount'); return; }
+
     setSubmitting(true);
     try {
       await paySupplier(id, {
@@ -129,7 +135,7 @@ export default function SupplierLedger() {
             <p className="text-xs text-gray-500">Supplier Ledger</p>
           </div>
         </div>
-        <button onClick={() => setPayOpen(true)} className="btn-success !py-2 !px-3 text-sm">
+        <button onClick={openPayModal} className="btn-success !py-2 !px-3 text-sm">
           <HiOutlineCreditCard className="w-4 h-4" /> <span className="hidden sm:inline">Pay</span>
         </button>
       </div>
@@ -234,6 +240,7 @@ export default function SupplierLedger() {
             <label className="label">Notes</label>
             <textarea className="input" rows="2" value={payForm.notes} onChange={(e) => setPayForm({ ...payForm, notes: e.target.value })} />
           </div>
+
           <div className="flex flex-col-reverse sm:flex-row justify-end gap-3 pt-2">
             <button type="button" onClick={() => setPayOpen(false)} className="btn-secondary w-full sm:w-auto justify-center">Cancel</button>
             <button

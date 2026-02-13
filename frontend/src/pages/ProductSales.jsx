@@ -7,7 +7,7 @@ import { HiOutlineChartBar, HiOutlineFilter } from 'react-icons/hi';
 
 export default function ProductSales() {
   const [salesData, setSalesData] = useState([]);
-  const [totals, setTotals] = useState({ totalRevenue: 0, totalQuantity: 0, totalBills: 0, totalCost: 0, totalProfit: 0, totalFittingRevenue: 0 });
+  const [totals, setTotals] = useState({ totalRevenue: 0, totalQuantity: 0, totalBills: 0, totalCost: 0, totalProfit: 0, totalFittingRevenue: 0, totalCustomerLess: 0 });
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filterCategory, setFilterCategory] = useState('');
@@ -147,7 +147,7 @@ export default function ProductSales() {
       </div>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-3">
         <div className="card !p-3 text-center">
           <p className="text-[10px] text-gray-500 uppercase">Total Revenue</p>
           <p className="text-lg font-bold text-primary-400">{formatCurrency(totals.totalRevenue)}</p>
@@ -163,6 +163,10 @@ export default function ProductSales() {
         <div className="card !p-3 text-center">
           <p className="text-[10px] text-gray-500 uppercase">Fitting Revenue</p>
           <p className="text-lg font-bold text-yellow-400">{formatCurrency(totals.totalFittingRevenue)}</p>
+        </div>
+        <div className="card !p-3 text-center">
+          <p className="text-[10px] text-gray-500 uppercase">Customer Less</p>
+          <p className={`text-lg font-bold ${totals.totalCustomerLess > 0 ? 'text-amber-400' : 'text-gray-500'}`}>{formatCurrency(totals.totalCustomerLess)}</p>
         </div>
         <div className="card !p-3 text-center">
           <p className="text-[10px] text-gray-500 uppercase">Total Qty Sold</p>
@@ -343,7 +347,7 @@ export default function ProductSales() {
 
       <div className="card !p-3">
         <p className="text-xs text-gray-500">
-          <span className="text-primary-400">Info:</span> Profit is calculated based on raw material consumption mapped to each product and average purchase rates. 
+          <span className="text-primary-400">Info:</span> Profit is calculated using each raw material's weighted average rate (based on opening stock rate + purchase rates). 
           Products showing "N/A" don't have material consumption data configured — update them in Products page.
         </p>
       </div>

@@ -4,7 +4,7 @@ import api from '../services/api';
 import Modal from '../components/Modal';
 import Loader from '../components/Loader';
 import { useAuth } from '../context/AuthContext';
-import { formatCurrency, formatDate, formatDateTime, getStatusColor } from '../utils/helpers';
+import { formatCurrency, formatDate, formatDateTime } from '../utils/helpers';
 import toast from 'react-hot-toast';
 import { HiOutlineArrowLeft, HiOutlinePrinter, HiOutlineCreditCard, HiOutlinePencil } from 'react-icons/hi';
 
@@ -12,7 +12,7 @@ export default function BillDetail() {
   const { id } = useParams();
   const { isOwner } = useAuth();
   const [bill, setBill] = useState(null);
-  const [payments, setPayments] = useState([]);
+  const [billPayments, setBillPayments] = useState([]);
   const [profitData, setProfitData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [paymentModal, setPaymentModal] = useState(false);
@@ -23,16 +23,15 @@ export default function BillDetail() {
     try {
       const promises = [
         api.get(`/bills/${id}`),
-        api.get(`/payments/bill/${id}`),
       ];
       if (isOwner) {
         promises.push(api.get(`/bills/${id}/profit`).catch(() => ({ data: { data: null } })));
       }
       const results = await Promise.all(promises);
       setBill(results[0].data.data);
-      setPayments(results[1].data.data);
-      if (isOwner && results[2]) {
-        setProfitData(results[2].data.data);
+      setBillPayments(results[0].data.payments || []);
+      if (isOwner && results[1]) {
+        setProfitData(results[1].data.data);
       }
     } catch (err) {
       console.error(err);
@@ -90,11 +89,9 @@ export default function BillDetail() {
           <Link to={`/bills/${id}/edit`} className="btn-secondary !py-2 !px-3 text-sm flex items-center gap-1">
             <HiOutlinePencil className="w-4 h-4" /> <span className="hidden sm:inline">Edit</span>
           </Link>
-          {bill.paymentStatus !== 'PAID' && (
-            <button onClick={() => setPaymentModal(true)} className="btn-success !py-2 !px-3 text-sm">
-              <HiOutlineCreditCard className="w-4 h-4" /> <span className="hidden sm:inline">Pay</span>
-            </button>
-          )}
+          <button onClick={() => setPaymentModal(true)} className="btn-success !py-2 !px-3 text-sm">
+            <HiOutlineCreditCard className="w-4 h-4" /> <span className="hidden sm:inline">Pay</span>
+          </button>
           <button onClick={() => window.print()} className="btn-secondary !py-2 !px-3 text-sm">
             <HiOutlinePrinter className="w-4 h-4" /> <span className="hidden sm:inline">Print</span>
           </button>
@@ -133,27 +130,25 @@ export default function BillDetail() {
             <h3 className="text-xs font-medium text-gray-400 mb-2">Summary</h3>
             <div className="space-y-1.5 text-sm">
               <div className="flex justify-between">
-                <span className="text-gray-400">Status</span>
-                <span className={getStatusColor(bill.paymentStatus)}>{bill.paymentStatus}</span>
+                <span className="text-gray-400">Grand Total</span>
+                <span className="font-bold text-primary-400 text-base">{formatCurrency(bill.grandTotal)}</span>
               </div>
-              <div className="flex justify-between">
-                <span className="text-gray-400">Total</span>
-                <span className="font-semibold text-gray-100">{formatCurrency(bill.grandTotal)}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-400">Paid</span>
-                <span className="text-emerald-400">{formatCurrency(bill.totalPaid)}</span>
-              </div>
-              <div className="flex justify-between border-t border-dark-border pt-1.5">
-                <span className="text-gray-400 font-medium">Due</span>
-                <span className={`font-bold ${bill.dueAmount > 0 ? 'text-red-400' : 'text-emerald-400'}`}>
-                  {formatCurrency(bill.dueAmount)}
-                </span>
-              </div>
+              {bill.discount > 0 && (
+                <div className="flex justify-between">
+                  <span className="text-gray-400">Discount</span>
+                  <span className="text-red-400">{bill.discountType === 'percent' ? `${bill.discount}%` : formatCurrency(bill.discount)}</span>
+                </div>
+              )}
               {bill.deliveryDate && (
                 <div className="flex justify-between">
                   <span className="text-gray-400">Delivery</span>
                   <span className="text-xs">{formatDate(bill.deliveryDate)}</span>
+                </div>
+              )}
+              {bill.advanceAmount > 0 && (
+                <div className="flex justify-between">
+                  <span className="text-gray-400">Advance Paid</span>
+                  <span className="text-emerald-400">{formatCurrency(bill.advanceAmount)}</span>
                 </div>
               )}
             </div>
@@ -221,16 +216,7 @@ export default function BillDetail() {
                   <td colSpan="5" className="text-right font-bold text-gray-200 text-xs">Grand Total</td>
                   <td className="font-bold text-primary-400">{formatCurrency(bill.grandTotal)}</td>
                 </tr>
-                {bill.totalPaid > 0 && (
-                  <tr>
-                    <td colSpan="5" className="text-right text-gray-400 text-xs">Paid</td>
-                    <td className="text-emerald-400">{formatCurrency(bill.totalPaid)}</td>
-                  </tr>
-                )}
-                <tr className="border-t border-dark-border">
-                  <td colSpan="5" className="text-right font-bold text-gray-200 text-xs">Due</td>
-                  <td className={`font-bold ${bill.dueAmount > 0 ? 'text-red-400' : 'text-emerald-400'}`}>{formatCurrency(bill.dueAmount)}</td>
-                </tr>
+
               </tfoot>
             </table>
           </div>
@@ -241,48 +227,63 @@ export default function BillDetail() {
           )}
         </div>
 
-        {/* Payment details — visible in print */}
-        {payments.length > 0 && (
-          <div className="print-payment-section mt-4" style={{ marginTop: '6px' }}>
-            <h4 className="text-sm font-semibold text-gray-200 mb-2" style={{ fontSize: '9px', fontWeight: 'bold', marginBottom: '3px' }}>Payment Details</h4>
-            <div className="table-container">
-              <table className="table print-compact-table">
+        {/* Payments received for this bill */}
+        {billPayments.length > 0 && (
+          <div className="card !p-4">
+            <h3 className="text-sm font-semibold text-gray-200 mb-3 flex items-center gap-2">
+              <HiOutlineCreditCard className="w-4 h-4 text-emerald-400" />
+              Payments Received ({billPayments.length})
+            </h3>
+            {/* Mobile */}
+            <div className="space-y-2 sm:hidden">
+              {billPayments.map((p) => (
+                <div key={p._id} className="bg-dark-bg rounded-lg p-3 border border-dark-border">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-emerald-400 font-semibold text-sm">{formatCurrency(p.amount)}</span>
+                    <div className="flex items-center gap-1">
+                      <span className="badge-info text-[10px]">{p.mode}</span>
+                      {p.lessAmount > 0 && <span className="badge-warning text-[10px]">Less {formatCurrency(p.lessAmount)}</span>}
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between text-[11px] text-gray-500">
+                    <span>{formatDateTime(p.createdAt)}</span>
+                    <span>{p.receivedBy?.name}</span>
+                  </div>
+                  {p.referenceNumber && <p className="text-[10px] text-gray-500 mt-1">Ref: {p.referenceNumber}</p>}
+                  {p.notes && <p className="text-[10px] text-gray-500 mt-1 italic">{p.notes}</p>}
+                </div>
+              ))}
+            </div>
+            {/* Desktop */}
+            <div className="table-container hidden sm:block">
+              <table className="table">
                 <thead>
                   <tr>
-                    <th>#</th>
                     <th>Date</th>
                     <th>Amount</th>
                     <th>Mode</th>
-                    <th>Ref</th>
+                    <th>Reference</th>
+                    <th>Notes</th>
+                    <th>Received By</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {payments.map((p, i) => (
+                  {billPayments.map((p) => (
                     <tr key={p._id}>
-                      <td>{i + 1}</td>
-                      <td>{formatDate(p.createdAt)}</td>
-                      <td className="font-semibold text-emerald-400">{formatCurrency(p.amount)}</td>
-                      <td>{p.mode}</td>
-                      <td>{p.referenceNumber || '-'}</td>
+                      <td className="text-xs whitespace-nowrap">{formatDateTime(p.createdAt)}</td>
+                      <td className="text-emerald-400 font-semibold">{formatCurrency(p.amount)}</td>
+                      <td><span className="badge-info">{p.mode}</span>{p.lessAmount > 0 && <span className="badge-warning ml-1">Less {formatCurrency(p.lessAmount)}</span>}</td>
+                      <td className="text-gray-500 text-xs">{p.referenceNumber || '-'}</td>
+                      <td className="text-gray-500 text-xs max-w-[200px] truncate">{p.notes || '-'}</td>
+                      <td className="text-gray-500 text-xs">{p.receivedBy?.name}</td>
                     </tr>
                   ))}
                 </tbody>
-                <tfoot>
-                  <tr className="border-t-2 border-dark-border">
-                    <td colSpan="2" className="text-right font-bold text-gray-200 text-xs">Total Paid</td>
-                    <td className="font-bold text-emerald-400">{formatCurrency(bill.totalPaid)}</td>
-                    <td colSpan="2"></td>
-                  </tr>
-                  <tr>
-                    <td colSpan="2" className="text-right font-bold text-gray-200 text-xs">Balance Due</td>
-                    <td className={`font-bold ${bill.dueAmount > 0 ? 'text-red-400' : 'text-emerald-400'}`}>{formatCurrency(bill.dueAmount)}</td>
-                    <td colSpan="2"></td>
-                  </tr>
-                </tfoot>
               </table>
             </div>
           </div>
         )}
+
 
         {/* Print footer */}
         <div className="print-footer hidden" style={{ marginTop: '8px', fontSize: '8px', textAlign: 'center', color: '#888' }}>
@@ -291,47 +292,7 @@ export default function BillDetail() {
       </div>
       {/* ─── END PRINT AREA ─── */}
 
-      {/* Payment history — screen only */}
-      <div className="card !p-4 no-print">
-        <h3 className="text-sm font-semibold text-gray-200 mb-3">Payment History</h3>
-        {payments.length > 0 ? (
-          <>
-            {/* Mobile cards */}
-            <div className="space-y-2 sm:hidden">
-              {payments.map((p) => (
-                <div key={p._id} className="bg-dark-bg rounded-lg p-3 border border-dark-border flex justify-between items-center">
-                  <div>
-                    <p className="text-sm font-semibold text-emerald-400">{formatCurrency(p.amount)}</p>
-                    <p className="text-xs text-gray-500">{formatDate(p.createdAt)} • {p.mode}</p>
-                  </div>
-                  <span className="text-xs text-gray-500">{p.receivedBy?.name}</span>
-                </div>
-              ))}
-            </div>
-            {/* Desktop table */}
-            <div className="table-container hidden sm:block">
-              <table className="table">
-                <thead>
-                  <tr><th>Date</th><th>Amount</th><th>Mode</th><th>Ref</th><th>By</th></tr>
-                </thead>
-                <tbody>
-                  {payments.map((p) => (
-                    <tr key={p._id}>
-                      <td className="text-xs">{formatDateTime(p.createdAt)}</td>
-                      <td className="text-emerald-400 font-semibold">{formatCurrency(p.amount)}</td>
-                      <td><span className="badge-info">{p.mode}</span></td>
-                      <td className="text-xs">{p.referenceNumber || '-'}</td>
-                      <td className="text-xs">{p.receivedBy?.name}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </>
-        ) : (
-          <p className="text-sm text-gray-500">No payments recorded yet.</p>
-        )}
-      </div>
+
 
       {/* Profit Analysis — Owner only, no print */}
       {isOwner && profitData && (
