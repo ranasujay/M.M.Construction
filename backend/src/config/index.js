@@ -9,4 +9,5 @@ module.exports = {
   jwtSecret: process.env.JWT_SECRET || 'fallback_secret',
   jwtExpire: process.env.JWT_EXPIRE || '7d',
   nodeEnv: process.env.NODE_ENV || 'development',
+  backupTempPath: process.env.BACKUP_TEMP_PATH || './temp-backups',
 };

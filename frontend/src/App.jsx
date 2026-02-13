@@ -33,6 +33,8 @@ import Suppliers from './pages/Suppliers';
 import SupplierLedger from './pages/SupplierLedger';
 import PurchaseEdit from './pages/PurchaseEdit';
 import PurchaseExpenses from './pages/PurchaseExpenses';
+import FinancialYearClose from './pages/FinancialYearClose';
+import BackupRestore from './pages/BackupRestore';
 
 // Protected route wrapper
 const ProtectedRoute = ({ children }) => {
@@ -123,6 +125,14 @@ function App() {
         <Route
           path="purchase-expenses"
           element={<OwnerRoute><PurchaseExpenses /></OwnerRoute>}
+        />
+        <Route
+          path="admin/financial-year-close"
+          element={<OwnerRoute><FinancialYearClose /></OwnerRoute>}
+        />
+        <Route
+          path="admin/backup-restore"
+          element={<OwnerRoute><BackupRestore /></OwnerRoute>}
         />
         {/* Worker & Payroll Module (Owner Only) */}
         <Route

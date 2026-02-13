@@ -33,12 +33,15 @@ const activityLogSchema = new mongoose.Schema(
         'SALARY_PAID',
         'CATEGORY_CREATED',
         'CATEGORY_DELETED',
+        'FY_BACKUP_CREATED',
+        'FY_BACKUP_VERIFIED',
+        'FY_DATA_DELETED',
       ],
     },
     entity: {
       type: String,
       required: true,
-      enum: ['bill', 'payment', 'customer', 'product', 'promise', 'user', 'worker', 'salary', 'category'],
+      enum: ['bill', 'payment', 'customer', 'product', 'promise', 'user', 'worker', 'salary', 'category', 'financial_year'],
     },
     entityId: {
       type: mongoose.Schema.Types.ObjectId,

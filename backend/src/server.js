@@ -23,6 +23,7 @@ const purchaseRoutes = require('./routes/purchaseRoutes');
 const stockLogRoutes = require('./routes/stockLogRoutes');
 const supplierRoutes = require('./routes/supplierRoutes');
 const customExpenseRoutes = require('./routes/customExpenseRoutes');
+const financialYearRoutes = require('./routes/financialYearRoutes');
 
 const app = express();
 
@@ -61,6 +62,7 @@ app.use('/api/purchases', purchaseRoutes);
 app.use('/api/stock-logs', stockLogRoutes);
 app.use('/api/suppliers', supplierRoutes);
 app.use('/api/custom-expenses', customExpenseRoutes);
+app.use('/api/financial-year', financialYearRoutes);
 
 // ─── Health Check ────────────────────────────────────────────────────
 app.get('/api/health', (req, res) => {
