@@ -28,6 +28,7 @@ const User = require('../models/User');
 const { AppError, asyncHandler } = require('../middleware/errorHandler');
 const { logActivity } = require('../utils/activityLogger');
 const { exportToJSON, compressToZip, cleanupTempFiles } = require('../utils/backupHelper');
+const { generateAllTypeMaps, castDocuments } = require('../utils/schemaTypeMap');
 const fs = require('fs');
 
 // ─── Helpers ─────────────────────────────────────────────────────────
@@ -577,16 +578,20 @@ const createFullBackup = asyncHandler(async (req, res) => {
     totalDocs += dataArrays[i].length;
   });
 
+  // Generate schema type maps so restore can cast every field correctly
+  const typeMaps = generateAllTypeMaps(MODEL_MAP);
+
   const backupData = {
     metadata: {
       backupType: 'full',
       timestamp: new Date().toISOString(),
-      version: '1.0',
+      version: '2.0', // v2 = schema-aware type maps embedded
       totalDocuments: totalDocs,
       collectionCounts: keys.reduce((acc, k, i) => {
         acc[k] = dataArrays[i].length;
         return acc;
       }, {}),
+      typeMaps, // ← every collection's field→type mapping
     },
     collections,
   };
@@ -661,31 +666,17 @@ const restoreFromBackup = asyncHandler(async (req, res) => {
     throw new AppError('Invalid backup format: missing "collections" object.', 400);
   }
 
-  // ── Helper: convert string ObjectIds back to proper ObjectId types ──
-  // JSON.stringify turns ObjectId → string; we must reverse that on restore.
-  const OID_REGEX = /^[a-f\d]{24}$/i;
+  // ── Build type maps for schema-aware casting ──
+  // v2 backups embed type maps; v1/old backups don't — generate from current schemas.
+  const backupVersion = backupData.metadata?.version || '1.0';
+  let typeMaps = backupData.metadata?.typeMaps || null;
 
-  function restoreObjectIds(doc) {
-    if (doc === null || doc === undefined) return doc;
-    if (typeof doc === 'string' && OID_REGEX.test(doc)) {
-      return new mongoose.Types.ObjectId(doc);
-    }
-    if (doc instanceof Date || typeof doc === 'number' || typeof doc === 'boolean') return doc;
-    if (Array.isArray(doc)) return doc.map(restoreObjectIds);
-    if (typeof doc === 'object') {
-      const out = {};
-      for (const [k, v] of Object.entries(doc)) {
-        // Convert date-like strings back to Date objects
-        if (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(v)) {
-          const d = new Date(v);
-          out[k] = isNaN(d.getTime()) ? v : d;
-        } else {
-          out[k] = restoreObjectIds(v);
-        }
-      }
-      return out;
-    }
-    return doc;
+  if (!typeMaps || typeof typeMaps !== 'object') {
+    // Old backup (v1) or missing type maps — generate from current Mongoose schemas
+    typeMaps = generateAllTypeMaps(MODEL_MAP);
+    console.log('[Restore] No embedded type maps — generated from current schemas (backward compat).');
+  } else {
+    console.log(`[Restore] Using embedded type maps from backup v${backupVersion}.`);
   }
 
   // Perform restore — collection by collection (sequential for Atlas compatibility)
@@ -699,8 +690,9 @@ const restoreFromBackup = asyncHandler(async (req, res) => {
       continue;
     }
 
-    // Convert all string ObjectIds and date strings back to proper types
-    const fixedDocs = docs.map(restoreObjectIds);
+    // Schema-aware type casting: use the type map for this collection
+    const typeMap = typeMaps[key] || {};
+    const fixedDocs = castDocuments(docs, typeMap);
 
     try {
       // In 'replace' mode, wipe existing data first

@@ -347,65 +347,85 @@ const updateBill = asyncHandler(async (req, res) => {
  * @route   GET /api/bills/stats
  */
 const getBillStats = asyncHandler(async (req, res) => {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const tomorrow = new Date(today);
-  tomorrow.setDate(tomorrow.getDate() + 1);
+  // IST = UTC + 5:30
+  const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
+  const istNow = new Date(Date.now() + IST_OFFSET_MS);
+  const istYear = istNow.getUTCFullYear();
+  const istMonth = istNow.getUTCMonth();
+  const istDay = istNow.getUTCDate();
 
-  const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+  // Midnight IST today (as UTC timestamp)
+  const todayStart = new Date(Date.UTC(istYear, istMonth, istDay) - IST_OFFSET_MS);
+  const tomorrowStart = new Date(todayStart.getTime() + 24 * 60 * 60 * 1000);
+  const monthStart = new Date(Date.UTC(istYear, istMonth, 1) - IST_OFFSET_MS);
 
-  // Today's billing
-  const todayStats = await Bill.aggregate([
-    { $match: { createdAt: { $gte: today, $lt: tomorrow } } },
-    { $group: { _id: null, total: { $sum: '$grandTotal' }, count: { $sum: 1 } } },
-  ]);
-
-  // Monthly revenue
-  const monthlyStats = await Bill.aggregate([
-    { $match: { createdAt: { $gte: startOfMonth } } },
-    { $group: { _id: null, total: { $sum: '$grandTotal' }, count: { $sum: 1 } } },
-  ]);
-
-  // Total outstanding
-  const dueStats = await Customer.aggregate([
-    { $match: { currentDue: { $gt: 0 } } },
-    { $group: { _id: null, totalDue: { $sum: '$currentDue' }, count: { $sum: 1 } } },
-  ]);
-
-  // Staff-wise billing (this month)
-  const staffStats = await Bill.aggregate([
-    { $match: { createdAt: { $gte: startOfMonth } } },
-    {
-      $group: {
-        _id: '$createdBy',
-        totalBilling: { $sum: '$grandTotal' },
-        billCount: { $sum: 1 },
+  const [
+    todayBilling, todayCollection,
+    monthlyBilling, monthlyCollection,
+    dueStats, staffStats
+  ] = await Promise.all([
+    // Today's billing
+    Bill.aggregate([
+      { $match: { createdAt: { $gte: todayStart, $lt: tomorrowStart } } },
+      { $group: { _id: null, total: { $sum: '$grandTotal' }, count: { $sum: 1 } } },
+    ]),
+    // Today's collection
+    Payment.aggregate([
+      { $match: { createdAt: { $gte: todayStart, $lt: tomorrowStart } } },
+      { $group: { _id: null, total: { $sum: '$amount' }, count: { $sum: 1 } } },
+    ]),
+    // Monthly billing
+    Bill.aggregate([
+      { $match: { createdAt: { $gte: monthStart } } },
+      { $group: { _id: null, total: { $sum: '$grandTotal' }, count: { $sum: 1 } } },
+    ]),
+    // Monthly collection
+    Payment.aggregate([
+      { $match: { createdAt: { $gte: monthStart } } },
+      { $group: { _id: null, total: { $sum: '$amount' }, count: { $sum: 1 } } },
+    ]),
+    // Total outstanding
+    Customer.aggregate([
+      { $match: { currentDue: { $gt: 0 } } },
+      { $group: { _id: null, totalDue: { $sum: '$currentDue' }, count: { $sum: 1 } } },
+    ]),
+    // Staff-wise billing (this month)
+    Bill.aggregate([
+      { $match: { createdAt: { $gte: monthStart } } },
+      {
+        $group: {
+          _id: '$createdBy',
+          totalBilling: { $sum: '$grandTotal' },
+          billCount: { $sum: 1 },
+        },
       },
-    },
-    {
-      $lookup: {
-        from: 'users',
-        localField: '_id',
-        foreignField: '_id',
-        as: 'staff',
+      {
+        $lookup: {
+          from: 'users',
+          localField: '_id',
+          foreignField: '_id',
+          as: 'staff',
+        },
       },
-    },
-    { $unwind: '$staff' },
-    {
-      $project: {
-        staffName: '$staff.name',
-        totalBilling: 1,
-        billCount: 1,
+      { $unwind: '$staff' },
+      {
+        $project: {
+          staffName: '$staff.name',
+          totalBilling: 1,
+          billCount: 1,
+        },
       },
-    },
-    { $sort: { totalBilling: -1 } },
+      { $sort: { totalBilling: -1 } },
+    ]),
   ]);
 
   res.json({
     success: true,
     data: {
-      today: todayStats[0] || { total: 0, count: 0 },
-      monthly: monthlyStats[0] || { total: 0, count: 0 },
+      today: todayBilling[0] || { total: 0, count: 0 },
+      todayCollection: todayCollection[0] || { total: 0, count: 0 },
+      monthly: monthlyBilling[0] || { total: 0, count: 0 },
+      monthlyCollection: monthlyCollection[0] || { total: 0, count: 0 },
       outstanding: dueStats[0] || { totalDue: 0, count: 0 },
       staffWise: staffStats,
     },
@@ -421,12 +441,14 @@ const getChartData = asyncHandler(async (req, res) => {
 
   let groupBy, dateFormat, limit, sortField;
 
+  const tz = 'Asia/Kolkata';
+
   if (period === 'daily') {
     // Last 30 days
     groupBy = {
-      year: { $year: '$createdAt' },
-      month: { $month: '$createdAt' },
-      day: { $dayOfMonth: '$createdAt' },
+      year: { $year: { date: '$createdAt', timezone: tz } },
+      month: { $month: { date: '$createdAt', timezone: tz } },
+      day: { $dayOfMonth: { date: '$createdAt', timezone: tz } },
     };
     dateFormat = 'daily';
     limit = 30;
@@ -434,8 +456,8 @@ const getChartData = asyncHandler(async (req, res) => {
   } else if (period === 'monthly') {
     // Last 12 months
     groupBy = {
-      year: { $year: '$createdAt' },
-      month: { $month: '$createdAt' },
+      year: { $year: { date: '$createdAt', timezone: tz } },
+      month: { $month: { date: '$createdAt', timezone: tz } },
     };
     dateFormat = 'monthly';
     limit = 12;
@@ -443,7 +465,7 @@ const getChartData = asyncHandler(async (req, res) => {
   } else {
     // Yearly
     groupBy = {
-      year: { $year: '$createdAt' },
+      year: { $year: { date: '$createdAt', timezone: tz } },
     };
     dateFormat = 'yearly';
     limit = 5;
@@ -475,23 +497,21 @@ const getChartData = asyncHandler(async (req, res) => {
   ]);
 
   // Payments aggregation (collections)
-  const payGroupBy = { ...groupBy };
-  // Re-build for payments collection
   let payGroupByObj;
   if (period === 'daily') {
     payGroupByObj = {
-      year: { $year: '$createdAt' },
-      month: { $month: '$createdAt' },
-      day: { $dayOfMonth: '$createdAt' },
+      year: { $year: { date: '$createdAt', timezone: tz } },
+      month: { $month: { date: '$createdAt', timezone: tz } },
+      day: { $dayOfMonth: { date: '$createdAt', timezone: tz } },
     };
   } else if (period === 'monthly') {
     payGroupByObj = {
-      year: { $year: '$createdAt' },
-      month: { $month: '$createdAt' },
+      year: { $year: { date: '$createdAt', timezone: tz } },
+      month: { $month: { date: '$createdAt', timezone: tz } },
     };
   } else {
     payGroupByObj = {
-      year: { $year: '$createdAt' },
+      year: { $year: { date: '$createdAt', timezone: tz } },
     };
   }
 
@@ -513,12 +533,14 @@ const getChartData = asyncHandler(async (req, res) => {
   const chartMap = new Map();
 
   // Pre-fill all dates/months/years so there are no gaps in the chart
-  const now = new Date();
+  // Use IST via UTC offset to match timezone-aware MongoDB aggregation
+  const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
+  const istNow = new Date(Date.now() + IST_OFFSET_MS);
   if (period === 'daily') {
     for (let i = 29; i >= 0; i--) {
-      const d = new Date(now);
-      d.setDate(d.getDate() - i);
-      const label = `${d.getDate()}/${d.getMonth() + 1}`;
+      const d = new Date(istNow);
+      d.setUTCDate(d.getUTCDate() - i);
+      const label = `${d.getUTCDate()}/${d.getUTCMonth() + 1}`;
       chartMap.set(label, {
         label,
         billing: 0,
@@ -531,8 +553,8 @@ const getChartData = asyncHandler(async (req, res) => {
     }
   } else if (period === 'monthly') {
     for (let i = 11; i >= 0; i--) {
-      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-      const label = `${monthNames[d.getMonth()]} ${d.getFullYear()}`;
+      const d = new Date(Date.UTC(istNow.getUTCFullYear(), istNow.getUTCMonth() - i, 1));
+      const label = `${monthNames[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
       chartMap.set(label, {
         label,
         billing: 0,
@@ -545,7 +567,7 @@ const getChartData = asyncHandler(async (req, res) => {
     }
   } else {
     for (let i = 4; i >= 0; i--) {
-      const label = `${now.getFullYear() - i}`;
+      const label = `${istNow.getUTCFullYear() - i}`;
       chartMap.set(label, {
         label,
         billing: 0,

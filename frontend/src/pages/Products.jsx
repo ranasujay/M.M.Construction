@@ -33,6 +33,8 @@ export default function Products() {
   const [form, setForm] = useState(defaultForm);
   const [editingId, setEditingId] = useState(null);
   const [submitting, setSubmitting] = useState(false);
+  const [materialSearch, setMaterialSearch] = useState({});
+  const [showMaterialDD, setShowMaterialDD] = useState({});
 
   const fetchCategories = async () => {
     try {
@@ -67,6 +69,8 @@ export default function Products() {
 
   const openCreateModal = () => {
     setForm({ ...defaultForm, category: categories[0] || '', materialConsumption: [] });
+    setMaterialSearch({});
+    setShowMaterialDD({});
     setEditingId(null);
     setModalOpen(true);
   };
@@ -86,6 +90,17 @@ export default function Products() {
         quantityPerUnit: mc.quantityPerUnit?.toString() || '0',
       })),
     });
+    const matSearch = {};
+    (product.materialConsumption || []).forEach((mc, idx) => {
+      if (mc.rawMaterial && typeof mc.rawMaterial === 'object') {
+        matSearch[idx] = `${mc.rawMaterial.name} (${mc.rawMaterial.unit})`;
+      } else if (mc.rawMaterial) {
+        const rm = rawMaterials.find(r => r._id === mc.rawMaterial);
+        if (rm) matSearch[idx] = `${rm.name} (${rm.unit})`;
+      }
+    });
+    setMaterialSearch(matSearch);
+    setShowMaterialDD({});
     setEditingId(product._id);
     setModalOpen(true);
   };
@@ -294,23 +309,49 @@ export default function Products() {
               )}
               {form.materialConsumption.map((mc, idx) => (
                 <div key={idx} className="flex gap-2 items-start">
-                  <div className="flex-1 min-w-0">
-                    <select
-                      className="select text-sm"
-                      value={mc.rawMaterial}
+                  <div className="flex-1 min-w-0 relative">
+                    <input
+                      className="input text-sm w-full"
+                      placeholder="Search material..."
+                      value={materialSearch[idx] ?? ''}
                       onChange={(e) => {
-                        const updated = [...form.materialConsumption];
-                        updated[idx] = { ...updated[idx], rawMaterial: e.target.value };
-                        setForm({ ...form, materialConsumption: updated });
+                        setMaterialSearch(prev => ({ ...prev, [idx]: e.target.value }));
+                        setShowMaterialDD(prev => ({ ...prev, [idx]: true }));
+                        if (!e.target.value) {
+                          const updated = [...form.materialConsumption];
+                          updated[idx] = { ...updated[idx], rawMaterial: '' };
+                          setForm({ ...form, materialConsumption: updated });
+                        }
                       }}
-                    >
-                      <option value="">Select material</option>
-                      {rawMaterials.map((rm) => (
-                        <option key={rm._id} value={rm._id}>
-                          {rm.name} ({rm.unit})
-                        </option>
-                      ))}
-                    </select>
+                      onFocus={() => setShowMaterialDD(prev => ({ ...prev, [idx]: true }))}
+                      onBlur={() => setTimeout(() => setShowMaterialDD(prev => ({ ...prev, [idx]: false })), 200)}
+                    />
+                    {showMaterialDD[idx] && (
+                      <div className="absolute z-50 w-full mt-1 max-h-48 overflow-y-auto bg-dark-card border border-dark-border rounded-lg shadow-xl">
+                        {rawMaterials
+                          .filter(rm => !materialSearch[idx] || rm.name.toLowerCase().includes((materialSearch[idx] || '').toLowerCase()))
+                          .map(rm => (
+                            <button
+                              key={rm._id}
+                              type="button"
+                              onMouseDown={(e) => e.preventDefault()}
+                              className="w-full text-left px-3 py-2 text-sm text-gray-200 hover:bg-dark-hover transition-colors"
+                              onClick={() => {
+                                const updated = [...form.materialConsumption];
+                                updated[idx] = { ...updated[idx], rawMaterial: rm._id };
+                                setForm({ ...form, materialConsumption: updated });
+                                setMaterialSearch(prev => ({ ...prev, [idx]: `${rm.name} (${rm.unit})` }));
+                                setShowMaterialDD(prev => ({ ...prev, [idx]: false }));
+                              }}
+                            >
+                              {rm.name} <span className="text-gray-500">({rm.unit})</span>
+                            </button>
+                          ))}
+                        {rawMaterials.filter(rm => !materialSearch[idx] || rm.name.toLowerCase().includes((materialSearch[idx] || '').toLowerCase())).length === 0 && (
+                          <p className="px-3 py-2 text-xs text-gray-500">No materials found</p>
+                        )}
+                      </div>
+                    )}
                   </div>
                   <div className="w-28 shrink-0">
                     <input
@@ -332,6 +373,14 @@ export default function Products() {
                     onClick={() => {
                       const updated = form.materialConsumption.filter((_, i) => i !== idx);
                       setForm({ ...form, materialConsumption: updated });
+                      const newSearch = {};
+                      updated.forEach((m, i) => {
+                        if (m.rawMaterial) {
+                          const rm = rawMaterials.find(r => r._id === m.rawMaterial);
+                          if (rm) newSearch[i] = `${rm.name} (${rm.unit})`;
+                        }
+                      });
+                      setMaterialSearch(newSearch);
                     }}
                     className="mt-1.5 text-red-400 hover:text-red-300"
                   >

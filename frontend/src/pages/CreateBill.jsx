@@ -15,7 +15,7 @@ export default function CreateBill() {
 
   // Inline new customer creation
   const [showNewCustomer, setShowNewCustomer] = useState(false);
-  const [newCustForm, setNewCustForm] = useState({ name: '', phone: '', address: '' });
+  const [newCustForm, setNewCustForm] = useState({ name: '', phone: '', address: '', openingBalance: '' });
   const [creatingCustomer, setCreatingCustomer] = useState(false);
 
   const [productSearch, setProductSearch] = useState({});
@@ -80,7 +80,7 @@ export default function CreateBill() {
       const c = data.data;
       selectCustomer(c);
       toast.success(`Customer "${c.name}" created`);
-      setNewCustForm({ name: '', phone: '', address: '' });
+      setNewCustForm({ name: '', phone: '', address: '', openingBalance: '' });
     } catch (err) {
       toast.error(err.response?.data?.message || 'Failed to create customer');
     } finally {
@@ -283,6 +283,7 @@ export default function CreateBill() {
                 <input className="input !py-2 text-sm" placeholder="WhatsApp No. *" value={newCustForm.phone} onChange={(e) => setNewCustForm({ ...newCustForm, phone: e.target.value })} />
               </div>
               <input className="input !py-2 text-sm" placeholder="Address *" value={newCustForm.address} onChange={(e) => setNewCustForm({ ...newCustForm, address: e.target.value })} />
+              <input type="number" step="0.01" min="0" className="input !py-2 text-sm" placeholder="Opening Balance ₹ (optional)" value={newCustForm.openingBalance} onChange={(e) => setNewCustForm({ ...newCustForm, openingBalance: e.target.value })} />
               <div className="flex justify-end">
                 <button type="button" onClick={handleCreateCustomer} disabled={creatingCustomer} className="btn-primary !py-2 !px-4 text-sm whitespace-nowrap">
                   {creatingCustomer ? 'Creating...' : 'Create & Select'}

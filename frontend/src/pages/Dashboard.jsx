@@ -13,6 +13,9 @@ import {
   HiOutlineTrendingUp,
   HiOutlineCreditCard,
   HiOutlineSearch,
+  HiOutlineCash,
+  HiOutlineArrowSmUp,
+  HiOutlineArrowSmDown,
 } from 'react-icons/hi';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
@@ -134,12 +137,47 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Stat cards */}
+      {/* ═══════ Stat Cards ═══════ */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <StatCard icon={HiOutlineCurrencyRupee} label="Today's Billing" value={formatCurrency(stats?.today?.total || 0)} subtext={`${stats?.today?.count || 0} bills`} color="green" />
-        <StatCard icon={HiOutlineTrendingUp} label="Monthly Revenue" value={formatCurrency(stats?.monthly?.total || 0)} subtext={`${stats?.monthly?.count || 0} bills this month`} color="primary" />
+        <StatCard icon={HiOutlineCurrencyRupee} label="Today's Billing" value={formatCurrency(stats?.today?.total || 0)} subtext={`${stats?.today?.count || 0} bills today`} color="green" />
+        <StatCard icon={HiOutlineCash} label="Today's Collection" value={formatCurrency(stats?.todayCollection?.total || 0)} subtext={`${stats?.todayCollection?.count || 0} payments`} color="primary" />
         <StatCard icon={HiOutlineExclamationCircle} label="Total Outstanding" value={formatCurrency(stats?.outstanding?.totalDue || 0)} subtext={`${stats?.outstanding?.count || 0} customers`} color="red" />
         <StatCard icon={HiOutlineDocumentText} label="Overdue Follow-ups" value={overduePromises.length} subtext="Customers to follow" color="yellow" />
+      </div>
+
+      {/* ═══════ Monthly Summary Strip ═══════ */}
+      <div className="card !p-4">
+        <h3 className="text-sm font-semibold text-gray-300 uppercase tracking-wider mb-3">
+          Monthly Summary ({new Date().toLocaleString('en-IN', { month: 'long', year: 'numeric' })})
+        </h3>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+          <div>
+            <p className="text-xs text-gray-500">Total Billing</p>
+            <p className="text-lg font-bold text-emerald-400">{formatCurrency(stats?.monthly?.total || 0)}</p>
+            <p className="text-[10px] text-gray-500">{stats?.monthly?.count || 0} bills</p>
+          </div>
+          <div>
+            <p className="text-xs text-gray-500">Total Collection</p>
+            <p className="text-lg font-bold text-primary-400">{formatCurrency(stats?.monthlyCollection?.total || 0)}</p>
+            <p className="text-[10px] text-gray-500">{stats?.monthlyCollection?.count || 0} payments</p>
+          </div>
+          <div>
+            <p className="text-xs text-gray-500">Net Due This Month</p>
+            <p className="text-lg font-bold text-red-400">
+              {formatCurrency(Math.max(0, (stats?.monthly?.total || 0) - (stats?.monthlyCollection?.total || 0)))}
+            </p>
+            <p className="text-[10px] text-gray-500">billing − collection</p>
+          </div>
+          <div>
+            <p className="text-xs text-gray-500">Collection Rate</p>
+            <p className="text-lg font-bold text-amber-400">
+              {stats?.monthly?.total > 0
+                ? `${Math.round(((stats?.monthlyCollection?.total || 0) / stats.monthly.total) * 100)}%`
+                : '—'}
+            </p>
+            <p className="text-[10px] text-gray-500">of monthly billing</p>
+          </div>
+        </div>
       </div>
 
       {/* ─── Chart Section ─── */}

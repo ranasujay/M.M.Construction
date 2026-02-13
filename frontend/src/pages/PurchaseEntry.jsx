@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { getRawMaterials, createPurchase, getSupplierNames } from '../services/stockApi';
+import { getRawMaterials, createRawMaterial, createPurchase, getSupplierNames } from '../services/stockApi';
 import ConfirmDialog from '../components/ConfirmDialog';
 import Loader from '../components/Loader';
 import { formatCurrency } from '../utils/helpers';
@@ -68,6 +68,31 @@ export default function PurchaseEntry() {
   const [discount, setDiscount] = useState('');
   const [paidAmount, setPaidAmount] = useState('');
   const [items, setItems] = useState([{ rawMaterial: '', quantity: '', ratePerUnit: '' }]);
+
+  // New material creation
+  const [showNewMaterial, setShowNewMaterial] = useState(false);
+  const [newMatForm, setNewMatForm] = useState({ name: '', unit: 'kg', openingStock: '' });
+  const [creatingMaterial, setCreatingMaterial] = useState(false);
+
+  const handleCreateMaterial = async () => {
+    if (!newMatForm.name.trim()) { toast.error('Material name is required'); return; }
+    setCreatingMaterial(true);
+    try {
+      const { data } = await createRawMaterial({
+        name: newMatForm.name.trim(),
+        unit: newMatForm.unit,
+        currentStock: parseFloat(newMatForm.openingStock) || 0,
+      });
+      toast.success(`Material "${data.data.name}" created`);
+      setMaterials(prev => [...prev, data.data].sort((a, b) => a.name.localeCompare(b.name)));
+      setNewMatForm({ name: '', unit: 'kg', openingStock: '' });
+      setShowNewMaterial(false);
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to create material');
+    } finally {
+      setCreatingMaterial(false);
+    }
+  };
 
   useEffect(() => {
     const handler = (e) => { if (supplierRef.current && !supplierRef.current.contains(e.target)) setShowSupplierDropdown(false); };
@@ -201,10 +226,34 @@ export default function PurchaseEntry() {
           <div>
             <div className="flex items-center justify-between mb-2">
               <label className="label !mb-0">Items</label>
-              <button type="button" onClick={addItem} className="text-primary-400 hover:text-primary-300 text-sm flex items-center gap-1">
-                <HiOutlinePlus className="w-4 h-4" /> Add Item
-              </button>
+              <div className="flex items-center gap-3">
+                <button type="button" onClick={() => setShowNewMaterial(!showNewMaterial)} className="text-cyan-400 hover:text-cyan-300 text-sm flex items-center gap-1">
+                  <HiOutlinePlus className="w-4 h-4" /> New Material
+                </button>
+                <button type="button" onClick={addItem} className="text-primary-400 hover:text-primary-300 text-sm flex items-center gap-1">
+                  <HiOutlinePlus className="w-4 h-4" /> Add Item
+                </button>
+              </div>
             </div>
+
+            {showNewMaterial && (
+              <div className="mb-3 p-3 bg-dark-bg rounded-lg border border-cyan-800/40 space-y-2">
+                <h4 className="text-xs font-semibold text-cyan-400 uppercase tracking-wider">Add New Raw Material</h4>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  <input className="input !py-2 text-sm" placeholder="Material Name *" value={newMatForm.name} onChange={(e) => setNewMatForm({ ...newMatForm, name: e.target.value })} />
+                  <select className="select !py-2 text-sm" value={newMatForm.unit} onChange={(e) => setNewMatForm({ ...newMatForm, unit: e.target.value })}>
+                    <option value="kg">kg</option><option value="piece">piece</option><option value="meter">meter</option><option value="sqft">sqft</option><option value="rft">rft</option><option value="foot">foot</option>
+                  </select>
+                  <input type="number" step="0.01" min="0" className="input !py-2 text-sm" placeholder="Opening Stock (optional)" value={newMatForm.openingStock} onChange={(e) => setNewMatForm({ ...newMatForm, openingStock: e.target.value })} />
+                </div>
+                <div className="flex justify-end gap-2">
+                  <button type="button" onClick={() => setShowNewMaterial(false)} className="text-xs text-gray-400 hover:text-gray-300 px-3 py-1.5">Cancel</button>
+                  <button type="button" onClick={handleCreateMaterial} disabled={creatingMaterial} className="btn-primary !py-1.5 !px-4 text-xs">
+                    {creatingMaterial ? 'Creating...' : 'Create Material'}
+                  </button>
+                </div>
+              </div>
+            )}
 
             <div className="space-y-3">
               {items.map((item, i) => (
